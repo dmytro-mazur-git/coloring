@@ -41,6 +41,20 @@ def cmd_job_stop(args, cfg):
     _out(stop_job(Path(args.job), args.reason, pages))
 
 
+def cmd_job_select(args, cfg):
+    from coloring_kit.preview import select_candidate
+
+    page = Path(args.page)
+    difficulty = json.loads(page.read_text()).get("difficulty", "medium")
+    _out(select_candidate(page, args.n, cfg["profiles"][args.profile or difficulty]))
+
+
+def cmd_sheet(args, cfg):
+    from coloring_kit.preview import build_sheet
+
+    _out({"sheet": str(build_sheet(Path(args.page).parent, Path(args.out) if args.out else None))})
+
+
 def cmd_config_get(args, cfg):
     value = cfg
     for part in args.key.split("."):
@@ -152,6 +166,17 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--reason", required=True)
     s.add_argument("--pages", help="comma-separated unresolved page numbers")
     s.set_defaults(func=cmd_job_stop)
+
+    s = job.add_parser("select", help="apply the user's pick from candidates.json to a page")
+    s.add_argument("--page", required=True, help="page.json path")
+    s.add_argument("--n", type=int, required=True, help="candidate number from the sheet")
+    s.add_argument("--profile", choices=PROFILES, help="default: the page's difficulty")
+    s.set_defaults(func=cmd_job_select)
+
+    s = sub.add_parser("sheet", help="contact sheet (REF + numbered candidates) for the user")
+    s.add_argument("--page", required=True, help="page.json path; reads candidates.json next to it")
+    s.add_argument("--out", help="default: <page dir>/candidates_sheet.png")
+    s.set_defaults(func=cmd_sheet)
 
     conf = sub.add_parser("config", help="read effective configuration").add_subparsers(
         dest="config_cmd", required=True)

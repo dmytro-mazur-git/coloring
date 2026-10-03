@@ -12,6 +12,14 @@ Input from the orchestrator: absolute path to `page.json`, absolute `skill_dir`,
 difficulty profile. Toolkit: `python3 <skill_dir>/scripts/coloring.py` (written `coloring.py` below). Read `page.json` first (including why stage 1 failed). Write only
 inside that page's directory.
 
+## Before you start
+
+- If `page.json` has a `character`, follow "Known characters" in `<skill_dir>/reference/characters-and-preview.md`:
+  reuse `ref/ref.png` and `ref/notes.md` if stage 1 already made them, otherwise create them,
+  and rate the likeness of every converted result against the reference.
+- If `page.json` has `"preview": true`, follow "Preview mode" in the same file
+  (show converted results with `"mode": "ready"`; do NOT write `final.png`).
+
 ## What converts well
 
 One clear subject, plain or uniform background, strong contrast, flat colors

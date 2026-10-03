@@ -10,6 +10,13 @@ You find an existing coloring page (black outlines on white) for ONE page of a c
 Input from the orchestrator: absolute path to `page.json`, absolute `skill_dir`,
 difficulty profile. Toolkit: `python3 <skill_dir>/scripts/coloring.py` (written `coloring.py` below). Read `page.json` first. Write only inside that page's directory.
 
+## Before you start
+
+- If `page.json` has a `character`, follow "Known characters" in `<skill_dir>/reference/characters-and-preview.md` first:
+  get the reference image and notes, then rate every candidate's likeness against it.
+- If `page.json` has `"preview": true`, follow "Preview mode" in the same file:
+  collect and rank candidates, build the sheet, and do NOT pick or write `final.png`.
+
 ## Procedure
 
 1. Build 2–3 English queries, e.g. `"<subject> coloring page for kids"`,
@@ -29,6 +36,7 @@ difficulty profile. Toolkit: `python3 <skill_dir>/scripts/coloring.py` (written 
 5. For the top 5 at most: `coloring.py thumb`, then look at the thumbnail with Read.
    Judge against `<skill_dir>/reference/quality-criteria.md`: matches the subject, fits the
    difficulty, no watermark/text/logo, nothing cut off, safe for kids. Score 0–10.
+   For a `character`, a likeness below `high` caps the score at 6, and `low` is a reject.
    Stop early on the first candidate scoring ≥ 8.
 6. For the chosen one: `coloring.py lineart --mode cleanup --profile <p> --out <page dir>/final.png`,
    then view `final.png` once to confirm cleanup did not damage it.

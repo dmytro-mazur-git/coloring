@@ -18,6 +18,9 @@ class PageSpec:
     subject: str
     caption: str | None = None
     query_hints: list[str] = field(default_factory=list)
+    # Known character (film, cartoon, game, book), e.g. "Baby from Saja Boys
+    # (KPop Demon Hunters)". Triggers the reference-image likeness check.
+    character: str | None = None
 
 
 @dataclass
@@ -31,6 +34,8 @@ class JobSpec:
     cover: bool = False
     orientation: Orientation = "auto"
     title: str | None = None
+    # The user wants to see candidates and choose before anything is selected.
+    preview: bool = False
 
     @classmethod
     def from_dict(cls, data: dict) -> "JobSpec":

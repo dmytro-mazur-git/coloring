@@ -12,8 +12,10 @@
   "cover": false,
   "orientation": "auto | portrait | landscape",
   "title": "Тварини ферми",
+  "preview": false,
   "pages": [
-    {"n": 1, "subject": "cow", "caption": "Корова", "query_hints": ["cartoon cow"]}
+    {"n": 1, "subject": "cow", "caption": "Корова", "query_hints": ["cartoon cow"],
+     "character": null}
   ]
 }
 ```
@@ -27,10 +29,14 @@
   "caption": "Корова",
   "difficulty": "easy",
   "query_hints": [],
+  "character": "Baby from Saja Boys (KPop Demon Hunters) | null",
+  "preview": false,
+  "reference": "ref/ref.png | null",
+  "chosen_by_user": false,
   "exclude_hashes": [],
   "status": "planned | selected | accepted | rejected | failed",
   "stages": {
-    "stage1": {"status": "found | not_found", "queries": [], "checked": 0, "candidate": null, "score": null, "notes": ""},
+    "stage1": {"status": "found | not_found | candidates", "queries": [], "checked": 0, "candidate": null, "score": null, "notes": ""},
     "stage2": {"...": "same shape"},
     "stage3": {"status": "done | failed", "prompts": [], "attempts": 0, "score": null, "notes": ""}
   },

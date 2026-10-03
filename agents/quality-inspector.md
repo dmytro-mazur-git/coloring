@@ -22,6 +22,12 @@ Apply `<skill_dir>/reference/quality-criteria.md` in full. Hard rejects:
 - gray areas, fills or shading remaining;
 - subject cut off, or the image is mostly noise.
 
+If a page has a `reference` (known character), view `<page dir>/ref/ref.png` and
+`ref/notes.md` next to `final.png` and judge likeness as described in `<skill_dir>/reference/characters-and-preview.md`:
+reject `low` likeness. If the page has `"chosen_by_user": true`, the user already approved
+the likeness: do not reject it for likeness or taste. Reject it only for hard problems
+(safety, leftover text/watermark, gray fills, broken cleanup) and explain them.
+
 For `variants` jobs, reject near-duplicates (keep the better one). For `set` jobs, flag
 pages whose style or difficulty clearly differs from the rest.
 

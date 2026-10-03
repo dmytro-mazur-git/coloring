@@ -32,6 +32,14 @@ Extract a JobSpec from the user's message (schema: `reference/page-schema.md`):
 - `captions` (default: off, on for `set`), `cover` (default: on for `set` with ≥ 3 pages),
   `orientation` (`auto` unless the user asks).
 - per page: English `subject` and optional `query_hints`; `caption` in the user's language.
+- per page `character`: set it when the subject is a specific known character (film,
+  cartoon, series, game, book), with the franchise, e.g. "Baby from Saja Boys
+  (KPop Demon Hunters)". Use the character's canonical name even if the user misspells it
+  or uses a nickname/translation (e.g. "Малюк" → Baby, "Saga boys" → Saja Boys).
+  Subagents then check likeness against an official reference image.
+- `preview` (default false): true when the user asks to see options first
+  ("спочатку покажи", "покажи варіанти", "let me choose"), or when they rejected a pick and
+  want a new search. See `reference/characters-and-preview.md`.
 
 Ask the user only if the subject itself is unclear. Otherwise proceed with defaults.
 
@@ -56,7 +64,20 @@ For `variants` mode you may give stage 1 a single subagent for all pages of the 
 subject (one search, N distinct picks).
 
 Subagents return a short JSON summary; details are in `page.json`. Do not open candidate
-images yourself — keep your context small.
+images yourself — keep your context small. (Exception: the contact sheet below.)
+
+**Preview mode** (`preview: true`): a stage subagent returns `"status": "candidates"` with a
+contact sheet instead of a pick. Look at the sheet once, then show it to the user
+(send the file if you can, otherwise give its path) with one line per number (site, why it
+matches, likeness to the reference), recommend one, and **stop and wait** for the user's
+choice. Then run `coloring.py job select --page <page.json> --n <N>` (several numbers →
+several pages: give each extra pick its own page) and continue with Step 3. If the user
+likes none, run the stage again in preview mode, telling the subagent to exclude the hashes
+of everything already shown; if stage 1 is exhausted, go on to stage 2.
+
+**User rejects a finished page** ("не подобається", "не схожий"): treat it as a new search
+for that page with `preview: true`. Keep the job; pass the rejected `final.phash` as an
+exclusion and the user's reason to the subagent.
 
 ## Step 3 — Final inspection
 
