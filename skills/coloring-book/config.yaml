@@ -20,6 +20,9 @@ fetch:
   user_agent: "coloring-plugin/0.1 (+personal use)"
 
 generate:
+  # Disabled for now: when a page needs generation, the orchestrator stops the job
+  # (no PDF) and reports which pages had no usable image. Set to true to enable stage 3.
+  enabled: false
   providers: [openai, replicate, fal]
   openai:
     model: gpt-image-1

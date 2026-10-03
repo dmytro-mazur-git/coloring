@@ -38,6 +38,8 @@ Ask the user only if the subject itself is unclear. Otherwise proceed with defau
 Write the spec to a temp file and run `coloring.py job init --spec <file>`.
 It prints the job directory and the per-page `page.json` paths.
 
+Also run `coloring.py config get generate.enabled` once: it decides whether stage 3 exists.
+
 ## Step 2 — Source cascade (stage by stage, pages in parallel)
 
 Run each stage for all still-open pages **in parallel** (one subagent per page, at most
@@ -47,6 +49,8 @@ Run each stage for all still-open pages **in parallel** (one subagent per page, 
 1. `coloring:coloring-searcher` — ready-made coloring pages.
 2. `coloring:image-scout` — for pages still `not_found`: images that convert well to line art.
 3. `coloring:illustrator` — for pages still open: generate with an external API.
+   **Only if `generate.enabled` is true.** Otherwise go to "Stopping" below as soon as
+   stage 2 leaves any page open.
 
 For `variants` mode you may give stage 1 a single subagent for all pages of the same
 subject (one search, N distinct picks).
@@ -60,6 +64,7 @@ Run one `coloring:quality-inspector` over all pages with `final.png` (pass the a
 job directory and `skill_dir`).
 For each `reject`: send the page to the next stage of the cascade once
 (stage 1 → 2 → 3). A rejected stage-3 page gets one more illustrator attempt, then `failed`.
+With generation disabled, a rejected page whose next stage would be 3 means "Stopping".
 
 ## Step 4 — Build the PDF and report
 
@@ -70,3 +75,16 @@ Run `coloring.py pdf --job <job dir>`. Then tell the user, in their language:
 - which pages failed and why, with a suggestion (rephrase, different subject).
 
 Failed pages never block the PDF if at least one page succeeded.
+
+## Stopping (generation needed but disabled)
+
+When a page can only be completed by generation and `generate.enabled` is false:
+
+1. Do not start any further subagents and do not build the PDF.
+2. Run `coloring.py job stop --job <job dir> --reason generation_disabled --pages <n,...>`
+   listing every page still without an accepted image.
+3. Tell the user, in their language: the job was stopped because these pages
+   (subject, short reason from `page.json` stage notes) had no suitable ready-made or
+   convertible image and generation is turned off. Suggest a different or more common
+   subject, or enabling generation later. Mention the job directory: candidates found so
+   far are kept there.

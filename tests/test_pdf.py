@@ -74,3 +74,12 @@ def test_no_pages_raises(job, cfg):
         write_json(path, {**json.loads(path.read_text()), "status": "failed"})
     with pytest.raises(ValueError):
         build_pdf(job, cfg)
+
+
+def test_job_stop_records_reason(job):
+    from coloring_kit.job import stop_job
+
+    result = stop_job(job, "generation_disabled", [3, 2])
+    state = json.loads((job / "job.json").read_text())
+    assert state["status"] == "stopped" and state["stop_reason"] == "generation_disabled"
+    assert state["unresolved_pages"] == [2, 3] == result["unresolved_pages"]

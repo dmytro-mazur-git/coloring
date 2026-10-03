@@ -47,6 +47,16 @@ def init_job(spec: JobSpec, output_dir: Path, max_pages: int) -> dict:
     return {"job_dir": str(job_dir.resolve()), "pages": page_paths}
 
 
+def stop_job(job_dir: Path, reason: str, pages: list[int]) -> dict:
+    """Mark the job as stopped (no PDF will be built) and record why."""
+    path = job_dir / "job.json"
+    job = json.loads(path.read_text())
+    job.update(status="stopped", stop_reason=reason, unresolved_pages=sorted(pages), pdf=None)
+    path.write_text(json.dumps(job, ensure_ascii=False, indent=2))
+    return {"job_dir": str(job_dir.resolve()), "status": "stopped", "reason": reason,
+            "unresolved_pages": sorted(pages)}
+
+
 def _spec_dict(spec: JobSpec) -> dict:
     from .models import to_dict
 

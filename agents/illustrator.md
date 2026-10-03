@@ -7,6 +7,10 @@ model: sonnet
 
 You generate a coloring page for ONE page of a coloring book.
 
+The orchestrator calls you only when `generate.enabled` is true in `config.yaml`.
+If `coloring.py generate` reports that generation is disabled, stop immediately and return
+`{"page": <n>, "status": "failed", "score": 0, "note": "generation disabled"}`.
+
 Input from the orchestrator: absolute path to `page.json`, absolute `skill_dir`,
 difficulty profile. Toolkit: `python3 <skill_dir>/scripts/coloring.py` (written `coloring.py` below). Read `page.json` first (including notes from earlier stages and any
 inspector rejection reasons). Write only inside that page's directory.

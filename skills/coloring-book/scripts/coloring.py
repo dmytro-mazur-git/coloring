@@ -34,6 +34,22 @@ def cmd_job_init(args, cfg):
     _out(init_job(spec, output_dir, cfg["max_pages"]))
 
 
+def cmd_job_stop(args, cfg):
+    from coloring_kit.job import stop_job
+
+    pages = [int(n) for n in args.pages.split(",") if n.strip()] if args.pages else []
+    _out(stop_job(Path(args.job), args.reason, pages))
+
+
+def cmd_config_get(args, cfg):
+    value = cfg
+    for part in args.key.split("."):
+        if not isinstance(value, dict) or part not in value:
+            sys.exit(f"error: unknown config key {args.key}")
+        value = value[part]
+    _out(value)
+
+
 def cmd_search(args, cfg):
     from coloring_kit.models import to_dict
     from coloring_kit.search import search
@@ -98,6 +114,9 @@ def cmd_lineart(args, cfg):
 def cmd_generate(args, cfg):
     from coloring_kit.generate import ProviderUnavailable, get_provider
 
+    if not cfg["generate"].get("enabled", False):
+        sys.exit("error: image generation is disabled (generate.enabled: false); "
+                 "the orchestrator must stop the job instead")
     names = [args.provider] if args.provider else cfg["generate"]["providers"]
     for name in names:
         try:
@@ -128,6 +147,17 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--spec", required=True)
     s.add_argument("--output-dir")
     s.set_defaults(func=cmd_job_init)
+    s = job.add_parser("stop", help="mark the job stopped (no PDF) with a reason")
+    s.add_argument("--job", required=True)
+    s.add_argument("--reason", required=True)
+    s.add_argument("--pages", help="comma-separated unresolved page numbers")
+    s.set_defaults(func=cmd_job_stop)
+
+    conf = sub.add_parser("config", help="read effective configuration").add_subparsers(
+        dest="config_cmd", required=True)
+    s = conf.add_parser("get", help="print a value, e.g. generate.enabled")
+    s.add_argument("key")
+    s.set_defaults(func=cmd_config_get)
 
     s = sub.add_parser("search", help="image search via configured providers")
     s.add_argument("--query", required=True)
