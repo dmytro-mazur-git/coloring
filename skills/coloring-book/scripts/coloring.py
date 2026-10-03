@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from coloring_kit.config import load_config  # noqa: E402
+from coloring_kit.http import HttpError  # noqa: E402
 
 PROFILES = ["easy", "medium", "hard"]
 
@@ -44,20 +45,41 @@ def cmd_search(args, cfg):
 def cmd_extract_images(args, cfg):
     from coloring_kit.fetch import extract_images
 
-    _out(extract_images(args.page_url, cfg))
+    _out(extract_images(args.page_url, cfg, args.limit))
 
 
 def cmd_fetch(args, cfg):
-    from coloring_kit.fetch import fetch
+    from coloring_kit.fetch import fetch_many
 
-    _out(fetch(args.url, Path(args.out), cfg, set(args.exclude_hash or [])))
+    candidates = [{"url": u} for u in args.url or []]
+    if args.candidates:
+        candidates += json.loads(Path(args.candidates).read_text())
+    if not candidates:
+        sys.exit("error: give --url and/or --candidates")
+    results = fetch_many(candidates[: args.limit], Path(args.out), cfg, set(args.exclude_hash or []))
+    ok = [r for r in results if "path" in r]
+    _out({"fetched": ok, "skipped": [r for r in results if "path" not in r]})
 
 
 def cmd_analyze(args, cfg):
     from coloring_kit.analyze import analyze
     from coloring_kit.models import to_dict
 
-    _out(to_dict(analyze(Path(args.image), cfg["profiles"][args.profile])))
+    images = [Path(i) for i in args.image]
+    if args.dir:
+        images += sorted(p for p in Path(args.dir).iterdir()
+                         if p.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"})
+    profile = cfg["profiles"][args.profile]
+    results = []
+    for image in images:
+        try:
+            results.append({"path": str(image), **to_dict(analyze(image, profile))})
+        except Exception as e:  # noqa: BLE001 - one broken file must not stop the batch
+            results.append({"path": str(image), "error": str(e)})
+    if args.sort:
+        key = f"{args.sort}_score"
+        results.sort(key=lambda r: r.get(key, -1), reverse=True)
+    _out(results)
 
 
 def cmd_thumb(args, cfg):
@@ -113,18 +135,23 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--limit", type=int, default=20)
     s.set_defaults(func=cmd_search)
 
-    s = sub.add_parser("extract-images", help="list images on a web page")
+    s = sub.add_parser("extract-images", help="list images on a web page, best first")
     s.add_argument("--page-url", required=True)
+    s.add_argument("--limit", type=int, default=40)
     s.set_defaults(func=cmd_extract_images)
 
-    s = sub.add_parser("fetch", help="download and validate one image")
-    s.add_argument("--url", required=True)
-    s.add_argument("--out", required=True, help="target directory")
-    s.add_argument("--exclude-hash", action="append")
+    s = sub.add_parser("fetch", help="download and validate images (parallel, dedup by pHash)")
+    s.add_argument("--url", action="append", help="repeatable")
+    s.add_argument("--candidates", help="JSON list from `search`/`extract-images` (keeps provenance)")
+    s.add_argument("--limit", type=int, default=20)
+    s.add_argument("--out", required=True, help="target directory, e.g. <page dir>/candidates")
+    s.add_argument("--exclude-hash", action="append", help="pHash to treat as duplicate; repeatable")
     s.set_defaults(func=cmd_fetch)
 
-    s = sub.add_parser("analyze", help="pixel metrics and profile fit")
-    s.add_argument("--image", required=True)
+    s = sub.add_parser("analyze", help="pixel metrics and profile fit (JSON list)")
+    s.add_argument("--image", action="append", default=[], help="repeatable")
+    s.add_argument("--dir", help="analyze all images in a directory")
+    s.add_argument("--sort", choices=["lineart", "convertibility"], help="sort best first")
     s.add_argument("--profile", choices=PROFILES, default="medium")
     s.set_defaults(func=cmd_analyze)
 
@@ -160,7 +187,7 @@ def main() -> None:
         args.func(args, cfg)
     except NotImplementedError:
         sys.exit(f"'{args.command}' is not implemented yet (skeleton)")
-    except (ValueError, FileNotFoundError) as e:
+    except (ValueError, FileNotFoundError, HttpError) as e:
         sys.exit(f"error: {e}")
 
 

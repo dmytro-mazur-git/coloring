@@ -16,7 +16,7 @@ search:
 fetch:
   timeout_s: 20
   max_bytes: 15000000
-  min_short_side_px: 800
+  min_short_side_px: 500     # line art is redrawn at print resolution, so ~600 px sources are fine
   user_agent: "coloring-plugin/0.1 (+personal use)"
 
 generate:
@@ -41,7 +41,7 @@ profiles:
   # line_px / min_component_area_px are at print scale (A4, 300 DPI).
   # kmeans_k / detail_edges tune `lineart --mode convert`.
   easy:   {line_px: [8, 14], regions: [0, 40],    min_component_area_px: 400, kmeans_k: 6,  detail_edges: false}
-  medium: {line_px: [5, 8],  regions: [30, 150],  min_component_area_px: 150, kmeans_k: 10, detail_edges: true}
+  medium: {line_px: [5, 8],  regions: [30, 150],  min_component_area_px: 150, kmeans_k: 10, detail_edges: false}
   hard:   {line_px: [3, 5],  regions: [100, 400], min_component_area_px: 50,  kmeans_k: 16, detail_edges: true}
 
 pdf:

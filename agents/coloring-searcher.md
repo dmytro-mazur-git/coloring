@@ -14,13 +14,18 @@ difficulty profile. Toolkit: `python3 <skill_dir>/scripts/coloring.py` (written 
 
 1. Build 2–3 English queries, e.g. `"<subject> coloring page for kids"`,
    `"<subject> outline drawing printable"`, using `query_hints`.
-2. `coloring.py search --query "<q>" --kind coloring --limit 20` for each query.
-   If all providers return nothing, use WebSearch for printable coloring pages and
-   `coloring.py extract-images --page-url <url>` on 2–3 result pages.
-3. `coloring.py fetch` the candidates into `<page dir>/candidates/`
-   (skip files whose hash is in `exclude_hashes`).
-4. `coloring.py analyze --profile <p>` each one. Keep those passing the profile's
-   `lineart_score` threshold. Rank by score.
+2. Collect candidates (each command writes a JSON list you save to a file):
+   - `coloring.py search --query "<q>" --kind coloring --limit 20 > <page dir>/search_N.json`
+   - Coloring-page websites usually beat image APIs here: use WebSearch for
+     `"<subject> coloring page printable"` and run
+     `coloring.py extract-images --page-url <url> > <page dir>/site_N.json` on 2–3 result pages.
+3. Download in one call per list (parallel, near-duplicates dropped, provenance kept in
+   `candidates/index.json`):
+   `coloring.py fetch --candidates <list.json> --out <page dir>/candidates [--exclude-hash <h> ...]`
+   passing every hash from `exclude_hashes`.
+4. `coloring.py analyze --dir <page dir>/candidates --profile <p> --sort lineart`.
+   Keep `lineart_score ≥ 0.7`; prefer `fits_profile: true` and `text_likelihood < 0.5`
+   (higher usually means a watermark or signature).
 5. For the top 5 at most: `coloring.py thumb`, then look at the thumbnail with Read.
    Judge against `<skill_dir>/reference/quality-criteria.md`: matches the subject, fits the
    difficulty, no watermark/text/logo, nothing cut off, safe for kids. Score 0–10.

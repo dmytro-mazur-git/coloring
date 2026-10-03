@@ -6,7 +6,8 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from PIL import Image, ImageOps
+import imagehash
+from PIL import Image, ImageFilter, ImageOps
 
 A4_MM = (210.0, 297.0)
 MM_PER_INCH = 25.4
@@ -107,3 +108,10 @@ def save_ink(ink: np.ndarray, out: Path) -> None:
     """Black ink on white paper, 8-bit grayscale PNG."""
     out.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(np.where(ink, 0, 255).astype(np.uint8), mode="L").save(out, optimize=True)
+
+
+def perceptual_hash(im: Image.Image) -> str:
+    """pHash of a slightly blurred copy: thin line art otherwise hashes unstably.
+    Resized/recompressed/cropped copies land within ~6 bits, different pictures ≥ ~20."""
+    gray = im.convert("L").resize((256, 256), Image.LANCZOS).filter(ImageFilter.GaussianBlur(2))
+    return str(imagehash.phash(gray))

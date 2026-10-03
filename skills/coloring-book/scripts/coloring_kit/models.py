@@ -62,6 +62,7 @@ class ImageMetrics:
     color_ratio: float          # share of saturated pixels
     gray_ratio: float           # share of mid-gray pixels
     ink_ratio: float            # share of dark (ink) pixels
+    solid_ratio: float          # share of ink inside thick solid areas (not lines)
     line_width_px: float        # median stroke width when fitted to A4 at 300 DPI
     closed_regions: int
     text_likelihood: float      # watermark/text heuristic

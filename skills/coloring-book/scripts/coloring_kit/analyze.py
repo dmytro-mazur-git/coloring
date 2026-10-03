@@ -9,7 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import cv2
-import imagehash
 import numpy as np
 from PIL import Image
 
@@ -18,6 +17,7 @@ from .imaging import (
     closed_regions,
     fit_scale,
     load_rgb,
+    perceptual_hash,
     resize_long,
     stroke_width,
     to_gray,
@@ -28,6 +28,8 @@ WORK_LONG_SIDE = 1024
 # Tolerance around the profile ranges: cleanup normalizes strokes, so only gross misfits matter.
 LINE_TOLERANCE = (0.5, 2.0)
 REGION_TOLERANCE = (0.5, 1.5)
+# Ink farther than this from paper (share of the long side) belongs to a solid fill, not a line.
+SOLID_DT_FRAC = 6 / 1024
 
 
 def _ramp(x: float, lo: float, hi: float) -> float:
@@ -43,15 +45,18 @@ def _in_band(x: float, lo: float, hi: float, soft: float) -> float:
     return float(max(0.0, 1 - abs(x - edge) / (edge * soft)))
 
 
-def _lineart_score(gray: np.ndarray, color_ratio: float, gray_ratio: float, ink_ratio: float) -> float:
+def _lineart_score(gray: np.ndarray, color_ratio: float, gray_ratio: float, ink_ratio: float,
+                   solid_ratio: float) -> float:
     bimodal = float(((gray < 80) | (gray > 200)).mean())
     white_border = float((border_strip(gray) > 200).mean())
     ink_ok = _in_band(ink_ratio, 0.02, 0.35, soft=1.0)
     base = 0.45 * bimodal + 0.3 * white_border + 0.25 * ink_ok
-    # Color and gray shading are what disqualify an image as a coloring page.
+    # Color, gray shading and big solid black areas (silhouettes, filled spots)
+    # are what disqualify an image as a coloring page.
     colorless = _ramp(color_ratio, 0.10, 0.0)
     shading = _ramp(gray_ratio, 0.15, 0.5)
-    return base * (0.3 + 0.7 * colorless) * (1 - 0.5 * shading)
+    solid = _ramp(solid_ratio, 0.10, 0.40)
+    return base * (0.3 + 0.7 * colorless) * (1 - 0.5 * shading) * (1 - 0.8 * solid)
 
 
 def _convertibility_score(rgb: np.ndarray, gray: np.ndarray) -> float:
@@ -114,6 +119,8 @@ def analyze(image: Path, profile: dict) -> ImageMetrics:
     otsu_t, _ = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     ink = gray < min(otsu_t, 128)   # gray shading is not ink
     ink_ratio = float(ink.mean())
+    dist = cv2.distanceTransform(ink.astype(np.uint8), cv2.DIST_L2, 5)
+    solid_ratio = float((dist > SOLID_DT_FRAC * WORK_LONG_SIDE).sum() / max(ink.sum(), 1))
 
     line_px = stroke_width(ink) * to_print
     min_area = max(4, round(profile["min_component_area_px"] / to_print**2))
@@ -125,16 +132,17 @@ def analyze(image: Path, profile: dict) -> ImageMetrics:
             and rlo * REGION_TOLERANCE[0] <= regions <= max(rhi * REGION_TOLERANCE[1], 1))
 
     with Image.open(image) as im:
-        phash = str(imagehash.phash(im.convert("L")))
+        phash = perceptual_hash(im)
 
     return ImageMetrics(
         width=width,
         height=height,
-        lineart_score=round(_lineart_score(gray, color_ratio, gray_ratio, ink_ratio), 3),
+        lineart_score=round(_lineart_score(gray, color_ratio, gray_ratio, ink_ratio, solid_ratio), 3),
         convertibility_score=round(_convertibility_score(rgb, gray), 3),
         color_ratio=round(color_ratio, 3),
         gray_ratio=round(gray_ratio, 3),
         ink_ratio=round(ink_ratio, 3),
+        solid_ratio=round(solid_ratio, 3),
         line_width_px=round(line_px, 1),
         closed_regions=regions,
         text_likelihood=round(_text_likelihood(ink), 3),

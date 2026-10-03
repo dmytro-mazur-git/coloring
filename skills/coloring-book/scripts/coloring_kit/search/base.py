@@ -26,13 +26,19 @@ def get_provider(name: str) -> ImageSearchProvider:
 
 
 def search(query: str, kind: Kind, limit: int, cfg: dict) -> list[Candidate]:
-    """Query providers in order; the first one returning results wins."""
-    safe = cfg["search"]["safe_search"] == "strict"
-    for name in cfg["search"]["providers"]:
+    """Query providers in order; the first one returning results wins.
+    Provider errors are skipped; candidates with blocked words in the title are dropped."""
+    from ..http import HttpError
+
+    scfg = cfg["search"]
+    safe = scfg["safe_search"] == "strict"
+    blocked = [w.lower() for w in scfg.get("blocked_words", [])]
+    for name in scfg["providers"]:
         try:
             results = get_provider(name).search(query, kind, limit, safe)
-        except ProviderUnavailable:
+        except (ProviderUnavailable, HttpError, ValueError):
             continue
+        results = [c for c in results if not any(w in (c.title or "").lower() for w in blocked)]
         if results:
             return results
     return []

@@ -10,7 +10,7 @@ convert (stage 2, regular images):
     (+ Canny detail edges for medium/hard) -> crop -> scale to print size -> finish.
 
 finish (both):
-    drop specks -> if stroke width is off-profile: skeletonize and redraw at the
+    drop specks -> big solid black fills become outlines (colorable) -> if stroke width is off-profile: skeletonize and redraw at the
     profile's target width -> close small gaps -> drop specks again.
 """
 
@@ -40,9 +40,14 @@ from .imaging import (
 Mode = Literal["cleanup", "convert"]
 
 CONVERT_WORK_LONG_SIDE = 1200
-DARK_THRESHOLD = 110          # gray below this is ink in cleanup mode
+DARK_THRESHOLD = 110          # cleanup: gray below this is always ink
+LIGHT_LINE_MAX_THRESHOLD = 200  # cleanup: upper bound of the adaptive ink threshold
 BG_UNIFORM_MAX_DIST = 18.0    # mean Lab distance of the border to call the background uniform
-BG_MATCH_DIST = 22.0          # Lab distance of a pixel to the background color to whiten it
+BG_MATCH_DIST = 12.0          # Lab distance of a pixel to the background color
+BG_LABEL = 255                # label reserved for the background region
+PARALLEL_MERGE_PX = 5         # convert: lines closer than this (work px) merge into one
+DARK_LAB_L = 70               # OpenCV Lab L (0..255) below which a color cluster is ink
+FILL_WIDTH_FACTOR = 3         # ink thicker than this × max line width is a solid fill
 
 
 def to_lineart(image: Path, out: Path, mode: Mode, profile: dict) -> dict:
@@ -94,7 +99,10 @@ def _cleanup(rgb: np.ndarray) -> np.ndarray:
     gray = gray[_crop_box(gray < 200)]
     gray = _scale_to_print(gray)
 
-    dark = gray < DARK_THRESHOLD
+    # Light "pencil" line art needs a higher threshold than bold ink: take Otsu's,
+    # but never so low that faint lines break, nor so high that paper texture counts.
+    otsu, _ = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    dark = gray < float(np.clip(otsu, DARK_THRESHOLD, LIGHT_LINE_MAX_THRESHOLD))
     # Gray fills/shading become paper; their outlines are kept as thin edges.
     # Edges right next to dark lines are skipped so they do not thicken them.
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -110,23 +118,35 @@ def _convert(rgb: np.ndarray, profile: dict) -> np.ndarray:
 
     lab = cv2.cvtColor(smooth, cv2.COLOR_RGB2LAB).astype(np.float32)
     background = _background_mask(lab)
-    if background is not None:
-        lab[background] = cv2.cvtColor(np.full((1, 1, 3), 255, np.uint8), cv2.COLOR_RGB2LAB)[0, 0]
 
-    labels = _quantize(lab, profile.get("kmeans_k", 10))
+    labels, centers = _quantize(lab, profile.get("kmeans_k", 10))
+    if background is not None:
+        # The background is its own region, so the subject's silhouette is always
+        # outlined, even where the subject's color is close to the background's.
+        labels[background] = BG_LABEL
     labels = cv2.medianBlur(labels, 7)
     labels = cv2.medianBlur(labels, 5)
 
+    # Near-black clusters are the drawing's own outlines (cartoons) or solid black
+    # parts: they are ink as they are. Boundaries are taken only between lighter
+    # regions, otherwise every black outline would turn into a double line.
+    dark = np.isin(labels, np.flatnonzero(centers[:, 0] < DARK_LAB_L))
     edges = np.zeros(labels.shape, dtype=bool)
     edges[:, 1:] |= labels[:, 1:] != labels[:, :-1]
     edges[1:, :] |= labels[1:, :] != labels[:-1, :]
+    edges &= ~(cv2.dilate(dark.astype(np.uint8), disk(5)) > 0)
+    edges |= dark
 
     if profile.get("detail_edges", False):
         gray = cv2.cvtColor(smooth, cv2.COLOR_RGB2GRAY)
         detail = cv2.Canny(gray, 60, 160) > 0
         if background is not None:
             detail &= ~background
-        edges |= detail
+        edges |= detail & ~(cv2.dilate(dark.astype(np.uint8), disk(5)) > 0)
+
+    # Region boundaries and Canny edges often run as near-parallel pairs a few pixels
+    # apart: merge them so _finish redraws a single line from the skeleton.
+    edges = cv2.morphologyEx(edges.astype(np.uint8), cv2.MORPH_CLOSE, disk(PARALLEL_MERGE_PX)) > 0
 
     subject = edges if background is None else (edges | ~background)
     edges = edges[_crop_box(subject)]
@@ -142,21 +162,27 @@ def _background_mask(lab: np.ndarray) -> np.ndarray | None:
     bg = np.median(border, axis=0)
     if float(np.linalg.norm(border - bg, axis=1).mean()) > BG_UNIFORM_MAX_DIST:
         return None
-    near = (np.linalg.norm(lab - bg, axis=2) < BG_MATCH_DIST).astype(np.uint8)
+    dist = np.linalg.norm(lab - bg, axis=2)
+    near = dist < BG_MATCH_DIST
+    # Faint edges of the color distance stop the flood fill where the subject's color
+    # is close to the background's (cream body on off-white paper).
+    amplified = np.clip(dist * 10, 0, 255).astype(np.uint8)
+    barrier = cv2.Canny(amplified, 30, 90) > 0
+    near = (near & ~(cv2.dilate(barrier.astype(np.uint8), disk(3)) > 0)).astype(np.uint8)
     _, comp = cv2.connectedComponents(near, connectivity=4)
     on_border = np.unique(np.concatenate([comp[0], comp[-1], comp[:, 0], comp[:, -1]]))
     on_border = on_border[on_border > 0]
     return np.isin(comp, on_border)
 
 
-def _quantize(lab: np.ndarray, k: int) -> np.ndarray:
-    """k-means color labels (uint8). Centers are fitted on a pixel sample for speed."""
+def _quantize(lab: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
+    """k-means color labels (uint8) and Lab centers. Centers are fitted on a pixel sample."""
     pixels = lab.reshape(-1, 3)
     rng = np.random.default_rng(0)
     sample = pixels[rng.choice(len(pixels), size=min(len(pixels), 60_000), replace=False)]
     k = int(min(k, len(np.unique(sample.round(), axis=0))))
     if k < 2:
-        return np.zeros(lab.shape[:2], dtype=np.uint8)
+        return np.zeros(lab.shape[:2], dtype=np.uint8), pixels.mean(axis=0, keepdims=True)
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0)
     cv2.setRNGSeed(0)
     _, _, centers = cv2.kmeans(sample, k, None, criteria, 3, cv2.KMEANS_PP_CENTERS)
@@ -167,7 +193,7 @@ def _quantize(lab: np.ndarray, k: int) -> np.ndarray:
         closer = d < best
         best[closer] = d[closer]
         labels[closer] = i
-    return labels.reshape(lab.shape[:2])
+    return labels.reshape(lab.shape[:2]), centers
 
 
 def _finish(ink: np.ndarray, profile: dict) -> np.ndarray:
@@ -176,8 +202,9 @@ def _finish(ink: np.ndarray, profile: dict) -> np.ndarray:
     target = (lo + hi) / 2
 
     ink = remove_small_components(ink, min_area)
+    ink = _outline_fills(ink, hi, target)
     width = stroke_width(ink)
-    if width and not lo * 0.8 <= width <= hi * 1.2:
+    if width and not lo <= width <= hi:
         # Smooth jagged edges first: they turn into spurs on the skeleton.
         smooth = cv2.GaussianBlur(ink.astype(np.float32), (0, 0), max(1.0, width / 4)) > 0.5
         skeleton = _prune_spurs(skeletonize(smooth), max_len=round(width + 2 * target))
@@ -186,6 +213,16 @@ def _finish(ink: np.ndarray, profile: dict) -> np.ndarray:
     ink = cv2.morphologyEx(ink.astype(np.uint8), cv2.MORPH_CLOSE, disk(max(3, target * 0.6))) > 0
     ink = remove_small_components(ink, min_area)
     return crop_to_content(ink)
+
+
+def _outline_fills(ink: np.ndarray, max_line: float, target: float) -> np.ndarray:
+    """Replace solid areas much thicker than a line with their outline; small
+    solid details (pupils, dots) stay black."""
+    fills = cv2.morphologyEx(ink.astype(np.uint8), cv2.MORPH_OPEN, disk(FILL_WIDTH_FACTOR * max_line)) > 0
+    if not fills.any():
+        return ink
+    inner = cv2.erode(fills.astype(np.uint8), disk(2 * target)) > 0
+    return ink & ~inner
 
 
 _NEIGHBORS = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]

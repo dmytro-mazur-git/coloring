@@ -21,9 +21,15 @@ One clear subject, plain or uniform background, strong contrast, flat colors
 
 1. Queries like `"<subject> cartoon clipart white background"`,
    `"<subject> simple flat illustration"`.
-2. `coloring.py search --kind image --limit 20`, `fetch`, then `analyze --profile <p>`.
-   Rank by `convertibility_score`.
-3. Convert the top 3 at most: `coloring.py lineart --mode convert --profile <p>`.
+2. `coloring.py search --query "<q>" --kind image --limit 20 > <page dir>/search_N.json`,
+   then `coloring.py fetch --candidates <page dir>/search_N.json --out <page dir>/candidates`
+   (pass `--exclude-hash` for every hash in `exclude_hashes`), then
+   `coloring.py analyze --dir <page dir>/candidates --profile <p> --sort convertibility`.
+   Skip candidates already rejected in stage 1 (see `stages.stage1`).
+3. Convert the top 3 at most: `coloring.py lineart --mode convert --profile <p> --out <page dir>/conv_N.png`.
+   If a candidate turns out to be line art already (`lineart_score ≥ 0.7`), use `--mode cleanup`.
+   Conversion works best on flat cartoons/clipart with dark outlines or plain silhouettes;
+   gray-outlined or shaded images may come out with doubled lines; judge the result.
 4. Look at the thumbnails of the **converted results** (not the originals) with Read.
    Judge against `<skill_dir>/reference/quality-criteria.md`: closed regions, clean lines,
    recognizable subject, fits difficulty, safe. Score 0–10. Stop early on ≥ 8.
