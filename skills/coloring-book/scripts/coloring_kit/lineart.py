@@ -1,7 +1,7 @@
 """Turn images into clean printable line art (black ink on white, sized for A4 at 300 DPI).
 
 cleanup (stage 1 and 3 outputs, already line art):
-    crop to content -> scale to print size -> ink = dark pixels + edges of gray fills
+    crop to content -> crop inside a page frame (drops site captions on it) -> scale to print size -> ink = dark pixels + edges of gray fills
     -> finish.
 
 convert (stage 2, regular images):
@@ -42,6 +42,8 @@ from .imaging import (
 Mode = Literal["cleanup", "convert"]
 
 CONVERT_WORK_LONG_SIDE = 1200
+FRAME_LINE_FRAC = 0.45        # cleanup: a row/column this full of ink is a frame line
+FRAME_EDGE_ZONE = 0.2         # ...when it lies within this share of the image from an edge
 DARK_THRESHOLD = 110          # cleanup: gray below this is always ink
 LIGHT_LINE_MAX_THRESHOLD = 200  # cleanup: upper bound of the adaptive ink threshold
 BG_UNIFORM_MAX_DIST = 18.0    # mean Lab distance of the border to call the background uniform
@@ -96,8 +98,31 @@ def _crop_box(mask: np.ndarray, pad_frac: float = 0.02) -> tuple[slice, slice]:
             slice(max(0, xs.min() - pad), min(w, xs.max() + pad + 1)))
 
 
+def _remove_frame(gray: np.ndarray) -> np.ndarray:
+    """Crop inside a page frame: long straight ink lines near the edges (full or partial
+    frames). Site captions/watermarks sitting on or outside the frame go with it."""
+    ink = gray < 128
+    h, w = ink.shape
+    rows = np.flatnonzero(ink.mean(axis=1) > FRAME_LINE_FRAC)
+    cols = np.flatnonzero(ink.mean(axis=0) > FRAME_LINE_FRAC)
+    top = rows[rows < h * FRAME_EDGE_ZONE]
+    bottom = rows[rows > h * (1 - FRAME_EDGE_ZONE)]
+    left = cols[cols < w * FRAME_EDGE_ZONE]
+    right = cols[cols > w * (1 - FRAME_EDGE_ZONE)]
+    pad = round(max(h, w) * 0.025)   # captions often stick out above the frame line
+    y0 = top.max() + pad if top.size else 0
+    y1 = bottom.min() - pad if bottom.size else h
+    x0 = left.max() + pad if left.size else 0
+    x1 = right.min() - pad if right.size else w
+    if y1 - y0 < h * 0.5 or x1 - x0 < w * 0.5:
+        return gray
+    return gray[y0:y1, x0:x1]
+
+
 def _cleanup(rgb: np.ndarray) -> np.ndarray:
     gray = to_gray(rgb)
+    gray = gray[_crop_box(gray < 200)]
+    gray = _remove_frame(gray)
     gray = gray[_crop_box(gray < 200)]
     gray = _scale_to_print(gray)
 
