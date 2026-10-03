@@ -10,7 +10,9 @@ convert (stage 2, regular images):
     (+ Canny detail edges for medium/hard) -> crop -> scale to print size -> finish.
 
 finish (both):
-    drop specks -> big solid black fills become outlines (colorable) -> if stroke width is off-profile: skeletonize and redraw at the
+    drop specks -> big solid black fills (much thicker than the drawing's own lines)
+    become outlines -> stroke width: cleanup only thickens too-thin lines (keeps the
+    artist's strokes); convert redraws off-profile lines from the skeleton at the
     profile's target width -> close small gaps -> drop specks again.
 """
 
@@ -60,7 +62,7 @@ def to_lineart(image: Path, out: Path, mode: Mode, profile: dict) -> dict:
     else:
         raise ValueError(f"unknown mode: {mode}")
 
-    ink = _finish(ink, profile)
+    ink = _finish(ink, profile, mode)
     if not ink.any():
         raise ValueError("no line art left after processing")
     save_ink(ink, out)
@@ -196,7 +198,7 @@ def _quantize(lab: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
     return labels.reshape(lab.shape[:2]), centers
 
 
-def _finish(ink: np.ndarray, profile: dict) -> np.ndarray:
+def _finish(ink: np.ndarray, profile: dict, mode: Mode) -> np.ndarray:
     min_area = profile["min_component_area_px"]
     lo, hi = profile["line_px"]
     target = (lo + hi) / 2
@@ -204,7 +206,13 @@ def _finish(ink: np.ndarray, profile: dict) -> np.ndarray:
     ink = remove_small_components(ink, min_area)
     ink = _outline_fills(ink, hi, target)
     width = stroke_width(ink)
-    if width and not lo <= width <= hi:
+    if mode == "cleanup":
+        # Found line art keeps the artist's strokes (tapering, solid eyes and brows):
+        # too-thin lines are thickened, which keeps shapes; thick lines stay as drawn.
+        if 0 < width < lo:
+            ink = cv2.dilate(ink.astype(np.uint8), disk(target - width + 1)) > 0
+    elif width and not lo <= width <= hi:
+        # Converted edges are our own lines: redraw them uniformly from the skeleton.
         # Smooth jagged edges first: they turn into spurs on the skeleton.
         smooth = cv2.GaussianBlur(ink.astype(np.float32), (0, 0), max(1.0, width / 4)) > 0.5
         skeleton = _prune_spurs(skeletonize(smooth), max_len=round(width + 2 * target))
@@ -215,10 +223,23 @@ def _finish(ink: np.ndarray, profile: dict) -> np.ndarray:
     return crop_to_content(ink)
 
 
+def _typical_line_width(ink: np.ndarray) -> float:
+    """Width of the drawing's own lines: median distance-transform value on the ridge.
+    Ridges of solid areas are short compared to their area, so lines dominate."""
+    dist = cv2.distanceTransform(ink.astype(np.uint8), cv2.DIST_L2, 5)
+    ridge = (dist > 0) & (dist >= cv2.dilate(dist, np.ones((3, 3), np.uint8)))
+    values = dist[ridge]
+    return float(2 * np.median(values)) if values.size else 0.0
+
+
 def _outline_fills(ink: np.ndarray, max_line: float, target: float) -> np.ndarray:
     """Replace solid areas much thicker than a line with their outline; small
-    solid details (pupils, dots) stay black."""
-    fills = cv2.morphologyEx(ink.astype(np.uint8), cv2.MORPH_OPEN, disk(FILL_WIDTH_FACTOR * max_line)) > 0
+    solid details (pupils, dots) stay black.
+
+    "Much thicker" is relative to both the profile and the drawing's own lines, so
+    bold-outline line art is not hollowed into double contours."""
+    line = max(max_line, _typical_line_width(ink))
+    fills = cv2.morphologyEx(ink.astype(np.uint8), cv2.MORPH_OPEN, disk(FILL_WIDTH_FACTOR * line)) > 0
     if not fills.any():
         return ink
     inner = cv2.erode(fills.astype(np.uint8), disk(2 * target)) > 0

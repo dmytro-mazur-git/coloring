@@ -27,7 +27,11 @@ def test_output_is_binary_print_sized_and_fits_profile(images, cfg, tmp_path, na
     assert max(px.shape) >= 0.8 * long_box or min(px.shape) >= 0.8 * short_box
 
     lo, hi = p["line_px"]
-    assert lo * 0.8 <= result["line_width_px"] <= hi * 1.2
+    if mode == "convert":
+        assert lo * 0.8 <= result["line_width_px"] <= hi * 1.2
+    else:
+        # cleanup keeps the artist's line weight, only thickening too-thin lines
+        assert result["line_width_px"] >= lo * 0.8
     assert result["closed_regions"] >= 4
 
 
