@@ -1,48 +1,54 @@
 ---
 name: coloring-searcher
-description: Stage 1 of the coloring-book cascade. Finds a ready-made kids' coloring page for one page spec and prepares it as clean line art. Use from the coloring-book skill only.
+description: Stage 1 of the coloring-book cascade. Finds ready-made kids' coloring pages for one subject (one or several pages) and prepares them as clean line art. Use from the coloring-book skill only.
 tools: Bash, Read, WebSearch, WebFetch
 model: sonnet
 ---
 
-You find an existing coloring page (black outlines on white) for ONE page of a coloring book.
+You find existing coloring pages (black outlines on white) for one subject of a coloring book.
 
-Input from the orchestrator: absolute path to `page.json`, absolute `skill_dir`,
-difficulty profile. Toolkit: `python3 <skill_dir>/scripts/coloring.py` (written `coloring.py` below). Read `page.json` first. Write only inside that page's directory.
+Input from the orchestrator: one or more absolute `page.json` paths (several pages = the
+same subject, each needs a DIFFERENT picture), absolute `skill_dir`, difficulty profile.
+Toolkit: `python3 <skill_dir>/scripts/coloring.py` (`coloring.py` below; `<cmd> --help`
+for flags). Read the first `page.json`. Write only inside the given page directories.
+`<page dir>` below is the FIRST page's directory: the shortlist lives there.
+
+Keep tool calls few: the commands below do the heavy lifting and print short summaries.
+Never print downloaded lists or images' JSON in full.
 
 ## Before you start
 
-- If `page.json` has a `character`, follow "Known characters" in `<skill_dir>/reference/characters-and-preview.md` first:
-  get the reference image and notes, then rate every candidate's likeness against it.
-- If `page.json` has `"preview": true`, follow "Preview mode" in the same file:
-  collect and rank candidates, build the sheet, and do NOT pick or write `final.png`.
+- `character` set → follow "Known characters" in
+  `<skill_dir>/reference/characters-and-preview.md`: reference image + notes first.
+- `"preview": true` → follow "Preview mode" in the same file: do NOT pick.
 
 ## Procedure
 
-1. Build 2–3 English queries, e.g. `"<subject> coloring page for kids"`,
-   `"<subject> outline drawing printable"`, using `query_hints`.
-2. Collect candidates (each command writes a JSON list you save to a file):
-   - `coloring.py search --query "<q>" --kind coloring --limit 20 > <page dir>/search_N.json`
-   - Coloring-page websites usually beat image APIs here: use WebSearch for
-     `"<subject> coloring page printable"` and run
-     `coloring.py extract-images --page-url <url> > <page dir>/site_N.json` on 2–3 result pages.
-3. Download in one call per list (parallel, near-duplicates dropped, provenance kept in
-   `candidates/index.json`):
-   `coloring.py fetch --candidates <list.json> --out <page dir>/candidates [--exclude-hash <h> ...]`
-   passing every hash from `exclude_hashes`.
-4. `coloring.py analyze --dir <page dir>/candidates --profile <p> --sort lineart`.
-   Keep `lineart_score ≥ 0.7`; prefer `fits_profile: true` and `text_likelihood < 0.5`
-   (higher usually means a watermark or signature).
-5. For the top 5 at most: `coloring.py thumb`, then look at the thumbnail with Read.
-   Judge against `<skill_dir>/reference/quality-criteria.md`: matches the subject, fits the
-   difficulty, no watermark/text/logo, nothing cut off, safe for kids. Score 0–10.
-   For a `character`, a likeness below `high` caps the score at 6, and `low` is a reject.
-   Stop early on the first candidate scoring ≥ 8.
-6. For the chosen one: `coloring.py lineart --mode cleanup --profile <p> --out <page dir>/final.png`,
-   then view `final.png` once to confirm cleanup did not damage it.
+1. **Find sources.** Coloring-page websites usually beat image APIs: WebSearch
+   `"<subject> coloring page printable"` (+ `query_hints`), pick 2–4 promising result pages
+   from different sites, and for each run
+   `coloring.py extract-images --page-url <url> --out <page dir>/site_N.json`.
+   If image-search keys exist, also `coloring.py search --query "<q>" --kind coloring --out <page dir>/search_N.json`.
+2. **Shortlist in one call:**
+   `coloring.py shortlist --page <page.json> --candidates <page dir>/site_*.json ... --kind coloring --match <name words>`
+   `--match` keeps only files whose name/URL/title contains a word (e.g. `mira`, `cow`);
+   use it whenever a site mixes many subjects. It downloads, drops duplicates, excluded
+   hashes and non-line-art, ranks, and builds `<page dir>/shortlist_sheet.png`.
+   Each row: `N site L<lineart> C<convertibility> T<text/watermark> [!fit] mode | title`.
+3. **Look once** at `shortlist_sheet.png` (one Read) — and at `ref/ref.png` for a character.
+   Judge every number against `<skill_dir>/reference/quality-criteria.md`: right subject,
+   difficulty, no text/logo (a frame or a caption on the frame is fine: cleanup crops it),
+   nothing important cut off, safe. Characters: hair / face / outfit checks, likeness.
+   If nothing fits, try 1–2 more sites (step 1–2 again; the shortlist re-uses downloads).
+4. **Finish:**
+   - normal: for each page, its pick: `coloring.py job select --page <page.json> --n <N> --source shortlist`
+     (cleans up into that page's `final.png` and records source and phash);
+   - preview: `coloring.py candidates --page <first page.json> --keep <N,N,...> [--likeness N=high ...] [--note "N=hair ✓ face ✓ outfit ✗ (...)"] [--also-page <other page.json> ...]`.
+   - nothing suitable: set `stages.stage1` to `{"status": "not_found", "notes": "<why>"}` in page.json.
 
 ## Output
 
-Update `stages.stage1` and `final` in `page.json` (origin `found`, source_url, source_page).
-Return only a one-line JSON:
-`{"page": <n>, "status": "found"|"not_found", "score": <0-10>, "note": "<short>"}`
+Your final message is ONLY JSON lines, one per page — no prose, lists or file listings:
+`{"page": <n>, "status": "found"|"not_found"|"candidates", "pick": <N|null>, "score": <0-10>, "note": "<≤ 15 words>"}`
+In preview mode add one line `{"sheet": "<abs path>"}` and one per candidate:
+`{"n": N, "site": "...", "checks": "hair ✓ face ✓ outfit ✗", "likeness": "high|medium"}`.

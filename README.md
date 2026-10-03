@@ -10,7 +10,7 @@
 
 Архітектура описана в [docs/architecture.md](docs/architecture.md).
 
-> Статус: **v0.3**. Працюють `job init`, `search` (SerpAPI, Brave, Openverse), `extract-images`, `fetch`, `analyze`, `thumb`, `lineart` (cleanup/convert) і `pdf`. Генерація поки заглушка з визначеним інтерфейсом.
+> Статус: **v0.4**. Працюють `job init`, `search` (SerpAPI, Brave, Openverse), `extract-images`, `fetch`, `analyze`, `thumb`, `lineart` (cleanup/convert) і `pdf`. Генерація поки заглушка з визначеним інтерфейсом.
 
 ## Структура
 

@@ -101,14 +101,25 @@ def fetch_many(candidates: list[dict], out_dir: Path, cfg: dict,
     of files already in `out_dir` and of each other (first in list order wins)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     index = _load_index(out_dir)
+    by_url = {v["url"]: name for name, v in index.items() if (out_dir / name).exists()}
     known = list(exclude_hashes) + [v["phash"] for v in index.values()]
 
+    def one(c: dict) -> dict:
+        name = by_url.get(c["url"])
+        if name:   # downloaded in an earlier call: reuse, don't count as its own duplicate
+            if any(_is_duplicate(index[name]["phash"], [h]) for h in exclude_hashes):
+                return {"url": c["url"], "skipped": "duplicate", "phash": index[name]["phash"]}
+            with Image.open(out_dir / name) as im:
+                w, h = im.size
+            return {**index[name], "path": str(out_dir / name), "width": w, "height": h, "cached": True}
+        return fetch_one(c, out_dir, cfg, known)
+
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        results = list(pool.map(lambda c: fetch_one(c, out_dir, cfg, known), candidates))
+        results = list(pool.map(one, candidates))
 
     # Second pass in list order: duplicates among this batch.
     for r in results:
-        if "path" not in r:
+        if "path" not in r or r.get("cached"):
             continue
         name = Path(r["path"]).name
         if name in index or _is_duplicate(r["phash"], known):
@@ -169,12 +180,15 @@ def _largest_from_srcset(srcset: str) -> str | None:
 
 
 def _unwrap(url: str) -> str:
-    """Resolve image-proxy URLs such as Next.js `/_next/image?url=...`."""
+    """Resolve image proxies and click trackers whose query carries the real image URL,
+    e.g. Next.js `/_next/image?url=...` or `t.asp?t=https://.../cow.png`."""
     parsed = urlparse(url)
-    if parsed.path.endswith("/_next/image"):
-        inner = parse_qs(parsed.query).get("url")
-        if inner:
-            return urljoin(url, inner[0])
+    for key, values in parse_qs(parsed.query).items():
+        for value in values:
+            inner = urljoin(url, value)
+            if (key == "url" and parsed.path.endswith("/_next/image")) or (
+                    urlparse(inner).scheme in ("http", "https") and IMAGE_EXT.search(inner)):
+                return inner
     return url
 
 

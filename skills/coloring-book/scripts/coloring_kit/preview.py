@@ -38,10 +38,10 @@ def _resolve(page_dir: Path, path: str) -> Path:
     return p if p.is_absolute() else page_dir / p
 
 
-def load_candidates(page_dir: Path) -> dict:
-    path = page_dir / "candidates.json"
+def load_candidates(page_dir: Path, name: str = "candidates.json") -> dict:
+    path = page_dir / name
     if not path.exists():
-        raise ValueError(f"no candidates.json in {page_dir}")
+        raise ValueError(f"no {name} in {page_dir}")
     return json.loads(path.read_text())
 
 
@@ -69,34 +69,76 @@ def _tile(image: Path, label: str, highlight: bool) -> Image.Image:
     return tile
 
 
-def build_sheet(page_dir: Path, out: Path | None = None) -> Path:
-    """Contact sheet: reference tile ("REF") first if present, then candidates by number."""
-    data = load_candidates(page_dir)
-    tiles = []
-    if data.get("reference"):
-        tiles.append(_tile(_resolve(page_dir, data["reference"]), "REF", highlight=True))
-    for c in sorted(data["candidates"], key=lambda c: c["n"])[:MAX_TILES]:
-        tiles.append(_tile(_resolve(page_dir, c["path"]), str(c["n"]), highlight=False))
-    if not tiles:
-        raise ValueError("candidates.json lists no candidates")
-
-    cols = min(len(tiles), 5)
+def contact_sheet(items: list[tuple[Path, str, bool]], out: Path, cols: int = 5) -> Path:
+    """Grid of labelled tiles; items are (image, label, highlight). One image for a
+    vision model to look at instead of one Read per picture."""
+    if not items:
+        raise ValueError("nothing to put on the sheet")
+    tiles = [_tile(path, label, hl) for path, label, hl in items]
+    cols = min(len(tiles), cols)
     rows = -(-len(tiles) // cols)
     sheet = Image.new("RGB", (cols * TILE_W + (cols + 1) * GAP, rows * TILE_H + (rows + 1) * GAP),
                       (225, 225, 225))
     for i, tile in enumerate(tiles):
         r, c = divmod(i, cols)
         sheet.paste(tile, (GAP + c * (TILE_W + GAP), GAP + r * (TILE_H + GAP)))
-
-    out = out or page_dir / "candidates_sheet.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(out, optimize=True)
     return out
 
 
-def select_candidate(page_json: Path, n: int, profile: dict) -> dict:
-    """Make candidate `n` the page's final image (user's choice) and update page.json."""
+def build_sheet(page_dir: Path, out: Path | None = None, name: str = "candidates.json") -> Path:
+    """Contact sheet: reference tile ("REF") first if present, then candidates by number."""
+    data = load_candidates(page_dir, name)
+    items = []
+    if data.get("reference"):
+        items.append((_resolve(page_dir, data["reference"]), "REF", True))
+    for c in sorted(data["candidates"], key=lambda c: c["n"])[:MAX_TILES]:
+        items.append((_resolve(page_dir, c.get("preview") or c["path"]), str(c["n"]), False))
+    default = "candidates_sheet.png" if name == "candidates.json" else Path(name).stem + "_sheet.png"
+    return contact_sheet(items, out or page_dir / default)
+
+
+def make_candidates(page_json: Path, keep: list[int], likeness: dict[int, str],
+                    notes: dict[int, str], also: list[Path] = ()) -> dict:
+    """Preview mode: turn chosen shortlist numbers (in the given order) into candidates.json
+    (renumbered 1..k, absolute paths), copy it to `also` pages and build the sheet."""
     page_dir = page_json.parent
-    data = load_candidates(page_dir)
+    short = load_candidates(page_dir, "shortlist.json")
+    by_n = {c["n"]: c for c in short["candidates"]}
+    missing = [k for k in keep if k not in by_n]
+    if missing:
+        raise ValueError(f"not in shortlist: {missing}")
+    cands = []
+    for i, k in enumerate(keep, 1):
+        c = dict(by_n[k])
+        for key in ("path", "preview", "original"):
+            if c.get(key):
+                c[key] = str(_resolve(page_dir, c[key]).resolve())
+        c.update(n=i, shortlist_n=k, likeness=likeness.get(k), note=notes.get(k, c.get("note", "")))
+        cands.append(c)
+    ref = short.get("reference")
+    data = {"stage": short.get("stage", "stage1"),
+            "reference": str(_resolve(page_dir, ref).resolve()) if ref else None,
+            "candidates": cands}
+    sheets = []
+    for target in [page_json, *also]:
+        (target.parent / "candidates.json").write_text(json.dumps(data, ensure_ascii=False, indent=2))
+        page = json.loads(target.read_text())
+        page.setdefault("stages", {}).setdefault(data["stage"], {})["status"] = "candidates"
+        target.write_text(json.dumps(page, ensure_ascii=False, indent=2))
+    sheets.append(str(build_sheet(page_dir)))
+    for target in also:
+        sheets.append(str(build_sheet(target.parent)))
+    return {"candidates": len(cands), "sheet": sheets[0]}
+
+
+def select_candidate(page_json: Path, n: int, profile: dict, source: str = "candidates",
+                     by_user: bool = True) -> dict:
+    """Make candidate `n` (from candidates.json or shortlist.json) the page's final image
+    and update page.json. `by_user` records that the user picked it."""
+    page_dir = page_json.parent
+    data = load_candidates(page_dir, f"{source}.json")
     chosen = next((c for c in data["candidates"] if c["n"] == n), None)
     if chosen is None:
         raise ValueError(f"no candidate {n}; available: {[c['n'] for c in data['candidates']]}")
@@ -113,6 +155,8 @@ def select_candidate(page_json: Path, n: int, profile: dict) -> dict:
     if chosen.get("mode") == "ready":
         shutil.copyfile(src, final)
         metrics = {"path": str(final)}
+    elif chosen.get("mode") == "convert":
+        metrics = to_lineart(src, final, "convert", profile)
     else:
         metrics = to_lineart(src, final, "cleanup", profile)
 
@@ -122,7 +166,7 @@ def select_candidate(page_json: Path, n: int, profile: dict) -> dict:
     stage = data.get("stage", "stage1")
     page = json.loads(page_json.read_text())
     page.setdefault("stages", {}).setdefault(stage, {}).update(
-        status="found", chosen_by_user=n, candidates="candidates.json")
+        status="found", chosen=n, chosen_from=f"{source}.json")
     page["final"] = {
         "path": "final.png",
         "origin": "found" if stage == "stage1" else "converted",
@@ -133,6 +177,6 @@ def select_candidate(page_json: Path, n: int, profile: dict) -> dict:
         "phash": phash,
     }
     page["status"] = "selected"
-    page["chosen_by_user"] = True
+    page["chosen_by_user"] = by_user
     page_json.write_text(json.dumps(page, ensure_ascii=False, indent=2))
     return {"page": page["n"], "selected": n, **metrics, "phash": phash}

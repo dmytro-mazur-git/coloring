@@ -60,8 +60,13 @@ Run each stage for all still-open pages **in parallel** (one subagent per page, 
    **Only if `generate.enabled` is true.** Otherwise go to "Stopping" below as soon as
    stage 2 leaves any page open.
 
-For `variants` mode you may give stage 1 a single subagent for all pages of the same
-subject (one search, N distinct picks).
+Pages of the same subject or character (`variants`, or "each girl twice") go to ONE
+subagent: pass all their `page.json` paths; it searches once and picks a different picture
+for each.
+
+**Subagent prompts stay short:** the role file already holds the procedure. Pass the page
+paths, `skill_dir`, profile, character name, exclusions and anything the user said about
+earlier picks, and end with: "Final message: only the JSON lines from your Output section."
 
 Subagents return a short JSON summary; details are in `page.json`. Do not open candidate
 images yourself — keep your context small. (Exception: the contact sheet below.)
@@ -79,10 +84,18 @@ of everything already shown; if stage 1 is exhausted, go on to stage 2.
 for that page with `preview: true`. Keep the job; pass the rejected `final.phash` as an
 exclusion and the user's reason to the subagent.
 
-## Step 3 — Final inspection
+## Step 3 — Final review (by you, from one image)
 
-Run one `coloring:quality-inspector` over all pages with `final.png` (pass the absolute
-job directory and `skill_dir`).
+Run `coloring.py review-sheet --job <job dir>`: one image with every page's final next to
+its character reference, plus a metrics line per page (L = line-art score, gray, T = text,
+`!fit` = outside the difficulty profile). Look at it **once** and check each page against
+`reference/quality-criteria.md`; for characters compare hair / face / outfit with the REF
+tile one by one (e.g. one ponytail vs two pigtails is a reject). Record each decision:
+`coloring.py job verdict --page <page.json> --accept|--reject --reason "..." [--score N]`.
+User-chosen pages are rejected only for hard defects (safety, text, gray fills).
+Use the `coloring:quality-inspector` subagent only for books over 9 pages or when you need
+a second opinion on specific pages.
+
 For each `reject`: send the page to the next stage of the cascade once
 (stage 1 → 2 → 3). A rejected stage-3 page gets one more illustrator attempt, then `failed`.
 With generation disabled, a rejected page whose next stage would be 3 means "Stopping".

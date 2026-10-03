@@ -27,24 +27,26 @@ One clear subject, plain or uniform background, strong contrast, flat colors
 
 ## Procedure
 
-1. Queries like `"<subject> cartoon clipart white background"`,
-   `"<subject> simple flat illustration"`.
-2. `coloring.py search --query "<q>" --kind image --limit 20 > <page dir>/search_N.json`,
-   then `coloring.py fetch --candidates <page dir>/search_N.json --out <page dir>/candidates`
-   (pass `--exclude-hash` for every hash in `exclude_hashes`), then
-   `coloring.py analyze --dir <page dir>/candidates --profile <p> --sort convertibility`.
-   Skip candidates already rejected in stage 1 (see `stages.stage1`).
-3. Convert the top 3 at most: `coloring.py lineart --mode convert --profile <p> --out <page dir>/conv_N.png`.
-   If a candidate turns out to be line art already (`lineart_score ≥ 0.7`), use `--mode cleanup`.
-   Conversion works best on flat cartoons/clipart with dark outlines or plain silhouettes;
-   gray-outlined or shaded images may come out with doubled lines; judge the result.
-4. Look at the thumbnails of the **converted results** (not the originals) with Read.
-   Judge against `<skill_dir>/reference/quality-criteria.md`: closed regions, clean lines,
-   recognizable subject, fits difficulty, safe. Score 0–10. Stop early on ≥ 8.
-5. Copy the best result to `<page dir>/final.png` if it scores ≥ 6. Otherwise report not_found.
+Keep tool calls few: the commands below print short summaries; never print lists in full.
+
+1. **Find sources:** WebSearch / `coloring.py search --kind image --out <page dir>/search_N.json`
+   for `"<subject> cartoon clipart white background"`, `"<subject> simple flat illustration"`;
+   `coloring.py extract-images --page-url <url> --out <page dir>/site_N.json` for good pages.
+2. **Shortlist and convert in one call:**
+   `coloring.py shortlist --page <page.json> --candidates <files...> --kind image --convert 4 [--match <words>]`
+   It skips excluded hashes, ranks by convertibility, converts the top 4 (`mode: ready`,
+   the sheet shows the converted result) and builds `shortlist_sheet.png`.
+   Candidates that are already line art get `mode: cleanup`.
+3. **Look once** at `shortlist_sheet.png` (and `ref/ref.png` for a character). Judge the
+   converted results: closed regions, clean lines, recognizable subject, fits difficulty,
+   safe; characters: hair / face / outfit. Conversion works best on flat cartoons/clipart
+   with dark outlines or plain silhouettes; gray outlines or shading may double lines.
+4. **Finish:** normal → `coloring.py job select --page <page.json> --n <N> --source shortlist`
+   for each page (score ≥ 6 only; otherwise not_found); preview →
+   `coloring.py candidates --page ... --keep ...` as in characters-and-preview.md.
 
 ## Output
 
-Update `stages.stage2` and `final` (origin `converted`, source_url, source_page) in `page.json`.
-Return only:
-`{"page": <n>, "status": "found"|"not_found", "score": <0-10>, "note": "<short>"}`
+Your final message is ONLY JSON lines, one per page — no prose, lists or file listings:
+`{"page": <n>, "status": "found"|"not_found"|"candidates", "pick": <N|null>, "score": <0-10>, "note": "<≤ 15 words>"}`
+In preview mode add `{"sheet": "<abs path>"}` and one line per candidate as in coloring-searcher.

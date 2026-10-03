@@ -56,7 +56,8 @@ def test_select_cleans_up_and_records_choice(page, cfg):
     assert (page.parent / "final.png").exists() and result["selected"] == 1
     assert data["status"] == "selected" and data["chosen_by_user"] is True
     assert data["final"]["source_url"] == "https://a.test/baby.png"
-    assert data["stages"]["stage1"]["chosen_by_user"] == 1
+    assert data["stages"]["stage1"]["chosen"] == 1
+    assert data["stages"]["stage1"]["chosen_from"] == "candidates.json"
 
 
 def test_reselect_keeps_previous_final(page, cfg):

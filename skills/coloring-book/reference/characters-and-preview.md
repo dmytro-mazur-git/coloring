@@ -31,25 +31,23 @@ saying "Baby" does not make the drawing look like Baby. So, before judging candi
 When `page.json` has `"preview": true`, the user wants to see candidates and choose.
 The stage subagent then **does not pick and does not write `final.png`**. Instead it:
 
-1. Gathers and filters candidates as usual (labelled, line art or convertible, safe,
-   likeness ≥ medium for characters). For stage 2, the candidate to show is the
-   **converted** result (`conv_N.png`), with `"mode": "ready"`.
-2. Keeps the best **2–6**, ordered best first, and writes `<page dir>/candidates.json`:
-   ```json
-   {"stage": "stage1", "reference": "ref/ref.png",
-    "candidates": [{"n": 1, "path": "candidates/abc.png", "mode": "cleanup",
-                    "source_url": "...", "source_page": "...",
-                    "why": "file baby.png, alt 'coloring page of Baby'",
-                    "likeness": "high", "note": "bust portrait, clean, no watermark"}]}
+1. Builds the shortlist as usual (`coloring.py shortlist ...`, see the agent file) and looks
+   at `shortlist_sheet.png` next to `ref/ref.png`. Drops wrong subjects, unsafe pictures,
+   text/logos that cleanup cannot crop, and `low` likeness. For stage 2 the sheet already
+   shows converted results.
+2. Keeps the best **2–6**, best first, with one command that writes `candidates.json`
+   (renumbered 1..k, absolute paths), copies it to the other pages of the same subject and
+   builds `candidates_sheet.png` (REF tile + numbers):
    ```
-   `reference` is null when the page has no character. Paths are relative to the page dir.
-3. Builds the sheet: `coloring.py sheet --page <page.json>` (REF tile + numbers 1..N).
-4. Sets `stages.<stage>.status` to `"candidates"` and returns
-   `{"page": n, "status": "candidates", "sheet": "<abs path>", "count": N, "note": "..."}`
-   plus one line per candidate: `N — site — why — likeness — note`.
+   coloring.py candidates --page <first page.json> --keep 3,1,6 \
+       --likeness 3=high --likeness 1=high --likeness 6=medium \
+       --note "3=hair ✓ face ✓ outfit ✓" --note "6=hair ✓ face ✗ outfit ✓ (doll face)" \
+       --also-page <second page.json>
+   ```
+3. Returns the sheet path and one JSON line per candidate (see the agent's Output section).
 
 The orchestrator shows the sheet to the user, waits for their choice, then runs
-`coloring.py job select --page <page.json> --n <N>`, which cleans the chosen image up into
-`final.png` (keeping any earlier final as `previous_final_K.png`) and records the choice.
-If the user likes none, the next round searches again, excluding hashes of everything
-already shown (`analyze` gives `phash`).
+`coloring.py job select --page <page.json> --n <N>` per page, which cleans the chosen image
+up into `final.png` (keeping any earlier final as `previous_final_K.png`) and records the
+choice. If the user likes none, the next round searches again with the rejected hashes in
+`exclude_hashes` (`shortlist.json` lists every candidate's `phash`).

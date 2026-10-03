@@ -46,13 +46,50 @@ def cmd_job_select(args, cfg):
 
     page = Path(args.page)
     difficulty = json.loads(page.read_text()).get("difficulty", "medium")
-    _out(select_candidate(page, args.n, cfg["profiles"][args.profile or difficulty]))
+    _out(select_candidate(page, args.n, cfg["profiles"][args.profile or difficulty],
+                          source=args.source, by_user=args.source == "candidates"))
 
 
 def cmd_sheet(args, cfg):
     from coloring_kit.preview import build_sheet
 
     _out({"sheet": str(build_sheet(Path(args.page).parent, Path(args.out) if args.out else None))})
+
+
+def cmd_shortlist(args, cfg):
+    from coloring_kit.shortlist import shortlist
+
+    _out(shortlist(Path(args.page), [Path(p) for p in args.candidates], cfg, args.kind,
+                   top=args.top, exclude=set(args.exclude_hash or []), convert=args.convert,
+                   limit=args.limit, match=args.match))
+
+
+def _pairs(values: list[str] | None) -> dict[int, str]:
+    out = {}
+    for v in values or []:
+        n, _, text = v.partition("=")
+        out[int(n)] = text
+    return out
+
+
+def cmd_candidates(args, cfg):
+    from coloring_kit.preview import make_candidates
+
+    keep = [int(x) for x in args.keep.split(",") if x.strip()]
+    _out(make_candidates(Path(args.page), keep, _pairs(args.likeness), _pairs(args.note),
+                         [Path(p) for p in args.also_page or []]))
+
+
+def cmd_review_sheet(args, cfg):
+    from coloring_kit.review import review_sheet
+
+    _out(review_sheet(Path(args.job), cfg))
+
+
+def cmd_job_verdict(args, cfg):
+    from coloring_kit.review import set_verdict
+
+    _out(set_verdict(Path(args.page), args.accept, args.reason or [], args.score))
 
 
 def cmd_config_get(args, cfg):
@@ -68,14 +105,24 @@ def cmd_search(args, cfg):
     from coloring_kit.models import to_dict
     from coloring_kit.search import search
 
-    results = search(args.query, args.kind, args.limit, cfg)
-    _out([to_dict(c) for c in results])
+    results = [to_dict(c) for c in search(args.query, args.kind, args.limit, cfg)]
+    if args.out:
+        Path(args.out).write_text(json.dumps(results, ensure_ascii=False, indent=1))
+        _out({"found": len(results), "file": args.out})
+    else:
+        _out(results)
 
 
 def cmd_extract_images(args, cfg):
     from coloring_kit.fetch import extract_images
 
-    _out(extract_images(args.page_url, cfg, args.limit))
+    items = extract_images(args.page_url, cfg, args.limit)
+    if args.out:
+        Path(args.out).write_text(json.dumps(items, ensure_ascii=False, indent=1))
+        _out({"found": len(items), "file": args.out,
+              "titles": [(i.get("title") or "")[:40] for i in items[:10]]})
+    else:
+        _out(items)
 
 
 def cmd_fetch(args, cfg):
@@ -88,7 +135,11 @@ def cmd_fetch(args, cfg):
         sys.exit("error: give --url and/or --candidates")
     results = fetch_many(candidates[: args.limit], Path(args.out), cfg, set(args.exclude_hash or []))
     ok = [r for r in results if "path" in r]
-    _out({"fetched": ok, "skipped": [r for r in results if "path" not in r]})
+    if args.verbose:
+        _out({"fetched": ok, "skipped": [r for r in results if "path" not in r]})
+    else:
+        _out({"fetched": len(ok), "skipped": len(results) - len(ok),
+              "index": str(Path(args.out) / "index.json")})
 
 
 def cmd_analyze(args, cfg):
@@ -170,6 +221,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = job.add_parser("select", help="apply the user's pick from candidates.json to a page")
     s.add_argument("--page", required=True, help="page.json path")
     s.add_argument("--n", type=int, required=True, help="candidate number from the sheet")
+    s.add_argument("--source", choices=["candidates", "shortlist"], default="candidates",
+                   help="candidates: the user's pick (preview); shortlist: the agent's pick")
     s.add_argument("--profile", choices=PROFILES, help="default: the page's difficulty")
     s.set_defaults(func=cmd_job_select)
 
@@ -177,6 +230,41 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--page", required=True, help="page.json path; reads candidates.json next to it")
     s.add_argument("--out", help="default: <page dir>/candidates_sheet.png")
     s.set_defaults(func=cmd_sheet)
+
+    s = job.add_parser("verdict", help="record the final review of a page")
+    s.add_argument("--page", required=True)
+    g = s.add_mutually_exclusive_group(required=True)
+    g.add_argument("--accept", action="store_true")
+    g.add_argument("--reject", action="store_true")
+    s.add_argument("--reason", action="append", help="repeatable")
+    s.add_argument("--score", type=int)
+    s.set_defaults(func=cmd_job_verdict)
+
+    s = sub.add_parser("shortlist", help="fetch+analyze+filter+rank candidate lists, numbered sheet")
+    s.add_argument("--page", required=True, help="page.json path")
+    s.add_argument("--candidates", nargs="+", required=True,
+                   help="JSON lists from `search --out` / `extract-images --out`")
+    s.add_argument("--kind", choices=["coloring", "image"], required=True)
+    s.add_argument("--top", type=int, default=8)
+    s.add_argument("--limit", type=int, default=40, help="max candidates to download")
+    s.add_argument("--convert", type=int, default=0,
+                   help="image kind: convert the top N convertible candidates for the sheet")
+    s.add_argument("--exclude-hash", action="append")
+    s.add_argument("--match", nargs="+",
+                   help="keep only images whose file name/URL/title contains one of these words")
+    s.set_defaults(func=cmd_shortlist)
+
+    s = sub.add_parser("candidates", help="preview mode: candidates.json + sheet from shortlist numbers")
+    s.add_argument("--page", required=True)
+    s.add_argument("--keep", required=True, help="shortlist numbers in display order, e.g. 3,1,5")
+    s.add_argument("--likeness", action="append", help="N=high|medium; repeatable")
+    s.add_argument("--note", action="append", help="N=text; repeatable")
+    s.add_argument("--also-page", action="append", help="another page.json to get the same candidates")
+    s.set_defaults(func=cmd_candidates)
+
+    s = sub.add_parser("review-sheet", help="final review: all finals with references on one sheet")
+    s.add_argument("--job", required=True)
+    s.set_defaults(func=cmd_review_sheet)
 
     conf = sub.add_parser("config", help="read effective configuration").add_subparsers(
         dest="config_cmd", required=True)
@@ -188,11 +276,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--query", required=True)
     s.add_argument("--kind", choices=["coloring", "image"], required=True)
     s.add_argument("--limit", type=int, default=20)
+    s.add_argument("--out", help="write the list to this file and print only a summary")
     s.set_defaults(func=cmd_search)
 
     s = sub.add_parser("extract-images", help="list images on a web page, best first")
     s.add_argument("--page-url", required=True)
     s.add_argument("--limit", type=int, default=40)
+    s.add_argument("--out", help="write the list to this file and print only a summary")
     s.set_defaults(func=cmd_extract_images)
 
     s = sub.add_parser("fetch", help="download and validate images (parallel, dedup by pHash)")
@@ -201,6 +291,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--limit", type=int, default=20)
     s.add_argument("--out", required=True, help="target directory, e.g. <page dir>/candidates")
     s.add_argument("--exclude-hash", action="append", help="pHash to treat as duplicate; repeatable")
+    s.add_argument("--verbose", action="store_true", help="full per-file results instead of counts")
     s.set_defaults(func=cmd_fetch)
 
     s = sub.add_parser("analyze", help="pixel metrics and profile fit (JSON list)")
