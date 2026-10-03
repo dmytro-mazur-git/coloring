@@ -1,0 +1,13 @@
+{
+  "name": "coloring",
+  "owner": {
+    "name": "Dmytro Mazur"
+  },
+  "plugins": [
+    {
+      "name": "coloring",
+      "source": "./",
+      "description": "Printable coloring-page PDFs for kids from a text description."
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+# Default configuration. Override with ~/.config/coloring/config.yaml.
+# Secrets are never stored here: they come from environment variables.
+
+output_dir: ./output
+max_pages: 10
+max_parallel_agents: 5
+
+search:
+  # Tried in order; a provider without its API key is skipped.
+  providers: [serpapi, brave, openverse]
+  safe_search: strict
+  candidates_per_query: 20
+  blocked_domains: []
+  blocked_words: []
+
+fetch:
+  timeout_s: 20
+  max_bytes: 15000000
+  min_short_side_px: 800
+  user_agent: "coloring-plugin/0.1 (+personal use)"
+
+generate:
+  providers: [openai, replicate, fal]
+  openai:
+    model: gpt-image-1
+    size: 1024x1536
+  max_attempts_per_page: 2
+
+stage_limits:
+  vision_candidates: 5        # max thumbnails a subagent looks at per stage
+  early_accept_score: 8
+  min_accept_score: 6
+
+thresholds:
+  lineart_score_min: 0.7      # stage 1 auto-filter
+  convertibility_score_min: 0.5
+
+thumb_max_px: 512
+
+profiles:
+  easy:   {line_px: [8, 14], regions: [0, 40],    min_component_area_px: 400}
+  medium: {line_px: [5, 8],  regions: [30, 150],  min_component_area_px: 150}
+  hard:   {line_px: [3, 5],  regions: [100, 400], min_component_area_px: 50}
+
+pdf:
+  dpi: 300
+  margin_mm: 10
+  caption_font: DejaVuSans-Bold
+  footer_attribution: true
