@@ -53,13 +53,16 @@ class Candidate:
 
 @dataclass
 class ImageMetrics:
-    """Output of `analyze`. Scores are 0..1."""
+    """Output of `analyze`. Scores and ratios are 0..1; pixel values are at print scale."""
 
+    width: int
+    height: int
     lineart_score: float
     convertibility_score: float
     color_ratio: float          # share of saturated pixels
     gray_ratio: float           # share of mid-gray pixels
-    line_width_px: float        # median stroke width
+    ink_ratio: float            # share of dark (ink) pixels
+    line_width_px: float        # median stroke width when fitted to A4 at 300 DPI
     closed_regions: int
     text_likelihood: float      # watermark/text heuristic
     phash: str

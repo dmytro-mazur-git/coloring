@@ -10,7 +10,7 @@
 
 Архітектура описана в [docs/architecture.md](docs/architecture.md).
 
-> Статус: **каркас v0.1**. Працюють CLI, модель даних і `job init`. Пошук, конвертація, генерація та PDF поки заглушки з визначеними інтерфейсами.
+> Статус: **v0.2**. Працюють `job init`, `analyze`, `thumb`, `lineart` (cleanup/convert) і `pdf`. Пошук, завантаження та генерація поки заглушки з визначеними інтерфейсами.
 
 ## Структура
 
@@ -38,6 +38,15 @@ pip install -r skills/coloring-book/scripts/requirements.txt
 
 Ключі API задаються змінними середовища (потрібен хоча б один ключ для пошуку і для генерації; Openverse працює без ключа):
 `SERPAPI_API_KEY`, `BRAVE_API_KEY`, `OPENAI_API_KEY`, `REPLICATE_API_TOKEN`, `FAL_KEY`.
+
+## Тести
+
+```bash
+pip install -r skills/coloring-book/scripts/requirements.txt -r tests/requirements.txt
+python3 -m pytest tests
+```
+
+Тести генерують синтетичні зображення самі й перевіряють метрики, конвертацію в line-art для всіх профілів складності та верстку PDF.
 
 ## Використання
 

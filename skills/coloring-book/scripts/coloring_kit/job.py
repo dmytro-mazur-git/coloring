@@ -12,7 +12,7 @@ from .models import JobSpec
 
 
 def _slug(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40] or "job"
+    return re.sub(r"[^\w]+", "-", text.lower()).strip("-_")[:40] or "job"
 
 
 def init_job(spec: JobSpec, output_dir: Path, max_pages: int) -> dict:

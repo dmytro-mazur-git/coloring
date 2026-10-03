@@ -5,3 +5,4 @@ opencv-python-headless>=4.9
 imagehash>=4.3
 reportlab>=4.1
 PyYAML>=6.0
+scikit-image>=0.22

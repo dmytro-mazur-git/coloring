@@ -63,7 +63,8 @@ def cmd_analyze(args, cfg):
 def cmd_thumb(args, cfg):
     from coloring_kit.analyze import thumbnail
 
-    _out({"thumb": str(thumbnail(Path(args.image), cfg["thumb_max_px"]))})
+    out = Path(args.out) if args.out else None
+    _out({"thumb": str(thumbnail(Path(args.image), cfg["thumb_max_px"], out))})
 
 
 def cmd_lineart(args, cfg):
@@ -129,6 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("thumb", help="small copy for vision review")
     s.add_argument("--image", required=True)
+    s.add_argument("--out", help="default: <page dir>/thumbs/<name>.png")
     s.set_defaults(func=cmd_thumb)
 
     s = sub.add_parser("lineart", help="cleanup or convert to printable line art")
@@ -158,6 +160,8 @@ def main() -> None:
         args.func(args, cfg)
     except NotImplementedError:
         sys.exit(f"'{args.command}' is not implemented yet (skeleton)")
+    except (ValueError, FileNotFoundError) as e:
+        sys.exit(f"error: {e}")
 
 
 if __name__ == "__main__":

@@ -38,12 +38,14 @@ thresholds:
 thumb_max_px: 512
 
 profiles:
-  easy:   {line_px: [8, 14], regions: [0, 40],    min_component_area_px: 400}
-  medium: {line_px: [5, 8],  regions: [30, 150],  min_component_area_px: 150}
-  hard:   {line_px: [3, 5],  regions: [100, 400], min_component_area_px: 50}
+  # line_px / min_component_area_px are at print scale (A4, 300 DPI).
+  # kmeans_k / detail_edges tune `lineart --mode convert`.
+  easy:   {line_px: [8, 14], regions: [0, 40],    min_component_area_px: 400, kmeans_k: 6,  detail_edges: false}
+  medium: {line_px: [5, 8],  regions: [30, 150],  min_component_area_px: 150, kmeans_k: 10, detail_edges: true}
+  hard:   {line_px: [3, 5],  regions: [100, 400], min_component_area_px: 50,  kmeans_k: 16, detail_edges: true}
 
 pdf:
   dpi: 300
   margin_mm: 10
-  caption_font: DejaVuSans-Bold
+  font: assets/fonts/DejaVuSans-Bold.ttf   # relative to the skill dir; must cover Cyrillic
   footer_attribution: true
