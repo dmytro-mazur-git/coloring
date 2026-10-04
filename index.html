@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Сани Санти</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Neucha&family=Nunito:wght@400;600;800&display=swap">
+<style>
+/* Layout: winter-night page; white drawing sheet on the left, crayon box on the right (stacks below on phones) */
+:root {
+  --bg: #e8eef6;
+  --fg: #1b2333;
+  --muted: #5a6577;
+  --panel: #f7f9fc;
+  --edge: #cfd8e5;
+  --accent: #c8102e;
+  --paper: #ffffff;
+  --line: #1d2433;
+  --font-display: "Neucha", "Comic Sans MS", "Segoe Print", cursive;
+  --font-body: "Nunito", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1726; --fg: #e8edf5; --muted: #9aa6ba; --panel: #172235; --edge: #2a3850; --accent: #ff5d72;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1726; --fg: #e8edf5; --muted: #9aa6ba; --panel: #172235; --edge: #2a3850; --accent: #ff5d72;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.5 var(--font-body);
+}
+.wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 32px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 24px; margin-bottom: 16px; }
+h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(2rem, 5vw, 3rem); line-height: 1.05; margin: 0; text-wrap: balance; }
+h1 span { color: var(--accent); }
+.sub { margin: 4px 0 0; color: var(--muted); max-width: 60ch; }
+.progress { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 600; }
+.progress b { color: var(--fg); }
+
+.studio { display: grid; grid-template-columns: minmax(0, 1fr) 272px; gap: 20px; align-items: start; }
+@media (max-width: 900px) { .studio { grid-template-columns: minmax(0, 1fr); } }
+
+.paper { background: var(--paper); border-radius: 14px; padding: 10px; box-shadow: 0 1px 0 var(--edge), 0 12px 30px -18px rgba(10, 20, 40, .45); }
+#art { display: block; width: 100%; height: auto; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+
+.tools { background: var(--panel); border: 1px solid var(--edge); border-radius: 14px; padding: 16px; display: grid; gap: 16px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+@media (max-width: 900px) { .tools { position: static; } }
+.label { font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.current { display: flex; align-items: center; gap: 12px; }
+.current-dot { width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--line); flex: none; }
+.current-name { font-family: var(--font-display); font-size: 1.4rem; line-height: 1.1; }
+.palette { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+@media (max-width: 900px) { .palette { grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); } }
+.swatch { aspect-ratio: 1; max-width: 100%; border-radius: 50%; border: 2px solid rgba(0, 0, 0, .25); cursor: pointer; padding: 0; transition: transform .12s; }
+.swatch:hover { transform: scale(1.1); }
+.swatch[aria-pressed="true"] { outline: 3px solid var(--fg); outline-offset: 2px; }
+.swatch.eraser { background: repeating-linear-gradient(45deg, #fff 0 5px, #e3e7ee 5px 10px); }
+.swatch:focus-visible, .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { flex: 1 1 auto; font: 700 14px/1 var(--font-body); padding: 11px 14px; border-radius: 10px; border: 1px solid var(--edge); background: var(--bg); color: var(--fg); cursor: pointer; }
+.btn:hover { border-color: var(--muted); }
+.btn.warn { color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: default; }
+.hint { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* drawing */
+.r { fill: #fff; stroke: var(--line); stroke-width: 2.6; stroke-linejoin: round; cursor: pointer; transition: fill .18s; }
+.so { fill: none; stroke: var(--line); stroke-linecap: round; stroke-linejoin: round; cursor: pointer; }
+.si { fill: none; stroke: #fff; stroke-linecap: round; stroke-linejoin: round; cursor: pointer; transition: stroke .18s; }
+.ink { fill: var(--line); pointer-events: none; }
+.ln { fill: none; stroke: var(--line); stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.r:hover, .sr:hover .si { filter: brightness(.93); }
+@media (prefers-reduced-motion: reduce) { .r, .si, .swatch { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Сани Санти <span>і Рудольф</span></h1>
+      <p class="sub">Обери олівець і натисни на будь-яку частину малюнка. Санта везе мішок подарунків, а сани тягнуть чотири олені. Рудольф з яскравим носом летить першим.</p>
+    </div>
+    <div class="progress" id="progress">Розфарбовано <b>0</b> з <b>0</b></div>
+  </header>
+
+  <div class="studio">
+    <div class="paper">
+      <svg id="art" viewBox="0 0 1200 760" role="img" aria-label="Розмальовка: Санта на санях з подарунками, четверо оленів, попереду Рудольф"></svg>
+    </div>
+
+    <aside class="tools">
+      <div>
+        <p class="label">Зараз у руці</p>
+        <div class="current">
+          <div class="current-dot" id="currentDot"></div>
+          <div class="current-name" id="currentName"></div>
+        </div>
+      </div>
+      <div>
+        <p class="label">Олівці</p>
+        <div class="palette" id="palette"></div>
+      </div>
+      <div class="btns">
+        <button class="btn" id="undoBtn" type="button">Назад</button>
+        <button class="btn" id="sampleBtn" type="button">Показати приклад</button>
+        <button class="btn warn" id="clearBtn" type="button">Очистити все</button>
+      </div>
+      <p class="hint">Малюнок зберігається в цьому браузері, тож можна повернутися й домалювати.</p>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.getElementById("art");
+  const WHITE = "#ffffff";
+  const regions = [];
+
+  const el = (tag, attrs, parent = svg) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    parent.appendChild(e);
+    return e;
+  };
+  const group = (transform, parent = svg) => el("g", transform ? { transform } : {}, parent);
+  // fill region
+  const R = (tag, attrs, role, parent = svg) => {
+    const e = el(tag, { ...attrs, class: "r", "data-id": regions.length }, parent);
+    regions.push({ el: e, role, mode: "fill" });
+    return e;
+  };
+  // thick-line region (antlers, legs, runners): outline + colourable core
+  const S = (d, w, role, parent = svg) => {
+    const g = el("g", { class: "sr", "data-id": regions.length }, parent);
+    el("path", { d, class: "so", "stroke-width": w + 5 }, g);
+    const inner = el("path", { d, class: "si", "stroke-width": w }, g);
+    regions.push({ el: inner, role, mode: "stroke" });
+    return g;
+  };
+  const ink = (tag, attrs, parent = svg) => el(tag, { ...attrs, class: "ink" }, parent);
+  const line = (d, w = 2.6, parent = svg, extra = {}) => el("path", { d, class: "ln", "stroke-width": w, ...extra }, parent);
+
+  const starPoints = (cx, cy, r, ri = r * 0.45) => {
+    const pts = [];
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? ri : r;
+      pts.push((cx + rr * Math.cos(a)).toFixed(1) + "," + (cy + rr * Math.sin(a)).toFixed(1));
+    }
+    return pts.join(" ");
+  };
+
+  function gift(x, y, w, h, rot, color, parent) {
+    const g = group(`translate(${x} ${y}) rotate(${rot})`, parent);
+    const rw = Math.max(6, w * 0.17);
+    R("ellipse", { cx: -w * 0.17, cy: -h / 2 - 6, rx: w * 0.2, ry: 7, transform: `rotate(-20 ${-w * 0.17} ${-h / 2 - 6})` }, "ribbon", g);
+    R("ellipse", { cx: w * 0.17, cy: -h / 2 - 6, rx: w * 0.2, ry: 7, transform: `rotate(20 ${w * 0.17} ${-h / 2 - 6})` }, "ribbon", g);
+    R("rect", { x: -w / 2, y: -h / 2, width: w, height: h, rx: 2 }, "gift:" + color, g);
+    R("rect", { x: -rw / 2, y: -h / 2, width: rw, height: h }, "ribbon", g);
+    R("rect", { x: -w / 2, y: -rw / 2, width: w, height: rw }, "ribbon", g);
+    R("circle", { cx: 0, cy: -h / 2 - 2, r: rw * 0.6 }, "ribbon", g);
+  }
+
+  function reindeer(x, y, rudolph) {
+    const g = group(`translate(${x} ${y}) scale(1.1)`);
+    // legs: flying gallop, hooves at the ends
+    const legs = [
+      ["M35 8 Q60 28 85 34", 85, 34],
+      ["M26 12 Q48 38 70 48", 70, 48],
+      ["M-34 8 Q-60 22 -80 8", -80, 8],
+      ["M-28 12 Q-48 36 -70 42", -70, 42],
+    ];
+    for (const [d, hx, hy] of legs) {
+      S(d, 9, "leg", g);
+      R("ellipse", { cx: hx, cy: hy, rx: 7, ry: 5.5 }, "hoof", g);
+    }
+    R("ellipse", { cx: 58, cy: -12, rx: 11, ry: 6, transform: "rotate(-30 58 -12)" }, "tail", g);
+    R("path", { d: "M-48 -4 Q-56 -38 -56 -58 L-36 -63 Q-30 -36 -12 -20 Z" }, "neck", g);
+    R("ellipse", { cx: 0, cy: 0, rx: 55, ry: 26 }, "body", g);
+    R("path", { d: "M-30 14 Q0 26 30 14 Q0 6 -30 14 Z" }, "belly", g);
+    R("path", { d: "M-8 -25 Q12 -33 32 -23 L28 -6 Q10 -13 -6 -8 Z" }, "saddle", g);
+    // antlers
+    S("M-44 -74 Q-40 -100 -20 -112 M-37 -95 Q-28 -96 -22 -88 M-30 -106 Q-38 -116 -40 -126", 6, "antler", g);
+    S("M-56 -76 Q-66 -100 -56 -120 M-62 -98 Q-74 -100 -80 -110", 6, "antler", g);
+    R("ellipse", { cx: -32, cy: -72, rx: 12, ry: 5, transform: "rotate(25 -32 -72)" }, "ear", g);
+    R("ellipse", { cx: -55, cy: -66, rx: 21, ry: 14, transform: "rotate(-10 -55 -66)" }, "head", g);
+    R("ellipse", { cx: -77, cy: -60, rx: 14, ry: 10 }, "snout", g);
+    if (rudolph) {
+      line("M-91 -82 A21 21 0 0 0 -112 -61", 2.4, g);
+      line("M-112 -61 A21 21 0 0 0 -91 -40", 2.4, g);
+      line("M-91 -88 A27 27 0 0 0 -118 -61", 2, g, { "stroke-dasharray": "4 6" });
+      line("M-118 -61 A27 27 0 0 0 -91 -34", 2, g, { "stroke-dasharray": "4 6" });
+    }
+    R("circle", { cx: -91, cy: -61, r: rudolph ? 10 : 5.5 }, rudolph ? "rudolphNose" : "nose", g);
+    ink("circle", { cx: -58, cy: -70, r: 3.2 }, g);
+    el("circle", { cx: -57, cy: -71.2, r: 1, fill: "#fff", "pointer-events": "none" }, g);
+    line("M-84 -52 Q-78 -48 -71 -52", 2.2, g);
+    R("path", { d: "M-52 -16 Q-32 -4 -12 -22 L-10 -13 Q-32 6 -54 -7 Z" }, "collar", g);
+    R("circle", { cx: -40, cy: -2, r: 5 }, "bell", g);
+    R("circle", { cx: -25, cy: -6, r: 5 }, "bell", g);
+  }
+
+  // --- sky ---
+  R("rect", { x: 0, y: 0, width: 1200, height: 760 }, "sky");
+  R("circle", { cx: 1080, cy: 105, r: 55 }, "moon");
+  R("circle", { cx: 1062, cy: 88, r: 10 }, "crater");
+  R("circle", { cx: 1098, cy: 122, r: 14 }, "crater");
+  R("circle", { cx: 1060, cy: 132, r: 6 }, "crater");
+  for (const [sx, sy, sr] of [[60, 60, 12], [250, 100, 10], [420, 50, 13], [600, 135, 9], [700, 40, 12], [880, 90, 11], [1000, 205, 9], [1150, 255, 11], [360, 150, 8], [530, 165, 8], [140, 140, 9], [810, 190, 8]]) {
+    R("polygon", { points: starPoints(sx, sy, sr) }, "star");
+  }
+
+  // --- ground ---
+  R("path", { d: "M0 600 Q300 540 600 610 T1200 590 L1200 760 L0 760 Z" }, "hillBack");
+  // tree
+  R("rect", { x: 140, y: 595, width: 20, height: 26 }, "trunk");
+  R("polygon", { points: "150,532 85,602 215,602" }, "tree");
+  R("polygon", { points: "150,498 96,566 204,566" }, "tree");
+  R("polygon", { points: "150,466 106,530 194,530" }, "tree");
+  for (const [bx, by] of [[128, 585], [172, 590], [150, 548], [122, 552], [178, 515]]) R("circle", { cx: bx, cy: by, r: 6 }, "bauble");
+  R("polygon", { points: starPoints(150, 462, 15) }, "treeStar");
+  // house
+  R("rect", { x: 1010, y: 540, width: 22, height: 42 }, "chimney");
+  R("rect", { x: 928, y: 588, width: 114, height: 68 }, "wall");
+  R("polygon", { points: "910,594 985,536 1060,594" }, "roof");
+  R("rect", { x: 944, y: 606, width: 30, height: 26 }, "window");
+  line("M959 606 L959 632 M944 619 L974 619");
+  R("rect", { x: 996, y: 614, width: 30, height: 42, rx: 3 }, "door");
+  ink("circle", { cx: 1019, cy: 636, r: 2.6 });
+  R("path", { d: "M0 680 Q350 620 700 690 T1200 670 L1200 760 L0 760 Z" }, "hillFront");
+
+  // --- gifts under the tree ---
+  gift(242, 602, 44, 36, 0, "#e63946");
+  gift(290, 612, 32, 26, 0, "#f48c06");
+
+  // --- falling gifts ---
+  gift(520, 455, 36, 30, 22, "#4cc9f0");
+  gift(600, 545, 42, 34, -14, "#7b2cbf");
+
+  // --- reindeer: three in the team, Rudolph leads ---
+  const team = [[650, 335, false], [480, 305, false], [310, 275, false], [140, 245, true]];
+  for (const [dx, dy, rud] of team) reindeer(dx, dy, rud);
+
+  // --- sleigh ---
+  const sl = group("translate(780 330)");
+  gift(234, -118, 34, 30, 6, "#ff8fab", sl);
+  gift(260, -88, 52, 44, 10, "#1d4ed8", sl);
+  gift(204, -84, 42, 36, -12, "#8ac926", sl);
+  R("path", { d: "M195 62 Q172 -15 218 -50 L210 -70 Q240 -80 268 -68 L255 -50 Q300 -15 288 62 Z" }, "sack", sl);
+  R("ellipse", { cx: 236, cy: -56, rx: 22, ry: 6 }, "tie", sl);
+  // Santa
+  R("path", { d: "M78 62 Q72 -8 120 -22 Q168 -8 162 62 Z" }, "coat", sl);
+  R("rect", { x: 114, y: -20, width: 12, height: 46, rx: 4 }, "fur", sl);
+  R("rect", { x: 77, y: 26, width: 86, height: 14 }, "belt", sl);
+  R("rect", { x: 110, y: 23, width: 20, height: 20, rx: 2 }, "buckle", sl);
+  R("circle", { cx: 120, cy: -45, r: 22 }, "face", sl);
+  R("path", { d: "M100 -62 Q112 -108 150 -104 Q170 -100 176 -78 L164 -74 Q155 -92 142 -64 Z" }, "hat", sl);
+  R("path", { d: "M96 -70 Q120 -80 146 -70 L146 -58 Q120 -68 96 -58 Z" }, "brim", sl);
+  R("circle", { cx: 172, cy: -74, r: 9 }, "pompom", sl);
+  ink("circle", { cx: 112, cy: -51, r: 2.6 }, sl);
+  ink("circle", { cx: 128, cy: -51, r: 2.6 }, sl);
+  R("path", { d: "M98 -44 Q92 0 120 4 Q148 0 142 -44 Q132 -30 120 -32 Q108 -30 98 -44 Z" }, "beard", sl);
+  R("ellipse", { cx: 111, cy: -37, rx: 10, ry: 5, transform: "rotate(-10 111 -37)" }, "moustache", sl);
+  R("ellipse", { cx: 129, cy: -37, rx: 10, ry: 5, transform: "rotate(10 129 -37)" }, "moustache", sl);
+  R("circle", { cx: 120, cy: -42, r: 4.5 }, "santaNose", sl);
+  // runners and struts
+  S("M60 116 L55 150 M222 116 L227 150", 8, "runner", sl);
+  S("M302 138 Q302 150 288 150 L20 150 Q-26 150 -28 118 Q-30 96 -10 100", 8, "runner", sl);
+  // body
+  R("path", { d: "M0 45 C-5 100 15 118 50 118 L225 118 C262 118 282 95 285 55 L290 -5 C292 -20 275 -25 268 -10 L255 62 L70 62 C60 40 40 25 20 25 C5 25 0 35 0 45 Z" }, "sleigh", sl);
+  R("path", { d: "M4 80 L274 80 L271 96 L8 96 Z" }, "trim", sl);
+  R("circle", { cx: 150, cy: 88, r: 12 }, "ornament", sl);
+  R("circle", { cx: 279, cy: -6, r: 8 }, "scroll", sl);
+  R("circle", { cx: 16, cy: 42, r: 8 }, "scroll", sl);
+  // arm holding the reins
+  R("path", { d: "M100 -5 Q70 5 50 32 L62 44 Q80 22 108 14 Z" }, "coat", sl);
+  R("circle", { cx: 54, cy: 40, r: 10 }, "mitten", sl);
+
+  // reins from Santa's mitten through every collar
+  line("M834 370 Q720 362 615 327 Q530 318 445 297 Q360 290 275 267 Q190 260 105 237", 2.6);
+
+  // ---------- colouring logic ----------
+  const COLORS = [
+    ["#e63946", "Червоний"], ["#9d0208", "Вишневий"], ["#f48c06", "Помаранчевий"], ["#ffd60a", "Жовтий"],
+    ["#e9c46a", "Золотий"], ["#8ac926", "Салатовий"], ["#1b7f3b", "Ялинковий"], ["#0b4f2c", "Темно-зелений"],
+    ["#a8dadc", "Крижаний"], ["#4cc9f0", "Блакитний"], ["#1d4ed8", "Синій"], ["#14213d", "Нічне небо"],
+    ["#7b2cbf", "Фіолетовий"], ["#ff8fab", "Рожевий"], ["#f8c9a0", "Тілесний"], ["#f5e6c8", "Кремовий"],
+    ["#c58c5c", "Світло-коричневий"], ["#8b5a2b", "Коричневий"], ["#4a2c17", "Шоколадний"], ["#9aa5b1", "Сірий"],
+    ["#222222", "Чорний"], [WHITE, "Гумка"],
+  ];
+  const SAMPLE = {
+    sky: "#14213d", moon: "#ffd60a", crater: "#e9c46a", star: "#ffd60a", hillBack: "#a8dadc", hillFront: WHITE,
+    trunk: "#8b5a2b", tree: "#1b7f3b", bauble: "#e63946", treeStar: "#ffd60a",
+    chimney: "#9d0208", wall: "#c58c5c", roof: "#9d0208", window: "#ffd60a", door: "#4a2c17",
+    leg: "#8b5a2b", hoof: "#4a2c17", tail: "#f5e6c8", neck: "#c58c5c", body: "#c58c5c", belly: "#f5e6c8",
+    saddle: "#1b7f3b", antler: "#e9c46a", ear: "#8b5a2b", head: "#c58c5c", snout: "#f5e6c8",
+    nose: "#4a2c17", rudolphNose: "#e63946", collar: "#e63946", bell: "#ffd60a",
+    ribbon: "#ffd60a", sack: "#c58c5c", tie: "#e63946", coat: "#e63946", fur: WHITE, belt: "#222222",
+    buckle: "#ffd60a", face: "#f8c9a0", hat: "#e63946", brim: WHITE, pompom: WHITE, beard: WHITE,
+    moustache: WHITE, santaNose: "#ff8fab", runner: "#e9c46a", sleigh: "#9d0208", trim: "#ffd60a",
+    ornament: "#1b7f3b", scroll: "#ffd60a", mitten: "#222222",
+  };
+  const sampleColor = role => role.startsWith("gift:") ? role.slice(5) : SAMPLE[role] || WHITE;
+
+  const KEY = "santa-sleigh-coloring-v1";
+  let fills = new Array(regions.length).fill(WHITE);
+  let history = [];
+  let current = COLORS[0][0];
+
+  const paint = (id, color) => {
+    fills[id] = color;
+    const r = regions[id];
+    if (r.mode === "stroke") r.el.style.stroke = color; else r.el.style.fill = color;
+  };
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(fills)); } catch (e) {} };
+  const progressEl = document.getElementById("progress");
+  const undoBtn = document.getElementById("undoBtn");
+  const refresh = () => {
+    const done = fills.filter(c => c !== WHITE).length;
+    progressEl.innerHTML = `Розфарбовано <b>${done}</b> з <b>${regions.length}</b>`;
+    undoBtn.disabled = history.length === 0;
+  };
+  // apply a batch of changes as one undo step
+  const applyAll = next => {
+    const changes = [];
+    next.forEach((c, i) => { if (c !== fills[i]) changes.push([i, fills[i]]); });
+    if (!changes.length) return;
+    history.push(changes);
+    next.forEach((c, i) => paint(i, c));
+    save(); refresh();
+  };
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY) || "null");
+    if (Array.isArray(saved) && saved.length === regions.length) saved.forEach((c, i) => paint(i, c));
+  } catch (e) {}
+
+  svg.addEventListener("click", e => {
+    const t = e.target.closest("[data-id]");
+    if (!t) return;
+    const id = +t.dataset.id;
+    if (fills[id] === current) return;
+    history.push([[id, fills[id]]]);
+    paint(id, current);
+    save(); refresh();
+  });
+
+  undoBtn.addEventListener("click", () => {
+    const step = history.pop();
+    if (!step) return;
+    for (const [id, c] of step) paint(id, c);
+    save(); refresh();
+  });
+
+  document.getElementById("sampleBtn").addEventListener("click", () => {
+    applyAll(regions.map(r => sampleColor(r.role)));
+  });
+
+  const clearBtn = document.getElementById("clearBtn");
+  let clearTimer = null;
+  clearBtn.addEventListener("click", () => {
+    if (!clearTimer) {
+      clearBtn.textContent = "Точно очистити?";
+      clearTimer = setTimeout(() => { clearBtn.textContent = "Очистити все"; clearTimer = null; }, 3000);
+      return;
+    }
+    clearTimeout(clearTimer); clearTimer = null;
+    clearBtn.textContent = "Очистити все";
+    applyAll(regions.map(() => WHITE));
+  });
+
+  // palette
+  const pal = document.getElementById("palette");
+  const dot = document.getElementById("currentDot");
+  const nameEl = document.getElementById("currentName");
+  const select = (btn, color, name) => {
+    current = color;
+    pal.querySelectorAll(".swatch").forEach(b => b.setAttribute("aria-pressed", "false"));
+    btn.setAttribute("aria-pressed", "true");
+    dot.style.background = color;
+    nameEl.textContent = name;
+  };
+  COLORS.forEach(([color, name], i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.id = "swatch-" + i;
+    b.className = "swatch" + (color === WHITE ? " eraser" : "");
+    if (color !== WHITE) b.style.background = color;
+    b.title = name;
+    b.setAttribute("aria-label", name);
+    b.addEventListener("click", () => select(b, color, name));
+    pal.appendChild(b);
+    if (i === 0) select(b, color, name);
+  });
+
+  refresh();
+})();
+</script>
+</body>
+</html>
