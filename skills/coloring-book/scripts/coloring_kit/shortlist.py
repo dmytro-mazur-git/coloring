@@ -48,6 +48,8 @@ def _matches(c: dict, terms: list[str]) -> bool:
 def shortlist(page_json: Path, lists: list[Path], cfg: dict, kind: str, top: int = 8,
               exclude: set[str] = frozenset(), convert: int = 0, limit: int = 40,
               match: list[str] | None = None) -> dict:
+    # Absolute paths: shortlist.json is later resolved against the page dir, not the cwd.
+    page_json = page_json.resolve()
     page_dir = page_json.parent
     page = json.loads(page_json.read_text())
     profile = cfg["profiles"][page.get("difficulty", "medium")]

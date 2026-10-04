@@ -1,5 +1,6 @@
 import json
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -90,3 +91,12 @@ def test_review_sheet_and_verdict(job, cfg, images):
     set_verdict(page1, False, ["text visible"], 3)
     data = json.loads(page1.read_text())
     assert data["status"] == "rejected" and data["inspection"]["reasons"] == ["text visible"]
+
+
+def test_shortlist_with_relative_page_path(job, cfg, tmp_path, monkeypatch):
+    (page1, _), lst = job
+    monkeypatch.chdir(tmp_path)
+    out = shortlist(page1.relative_to(tmp_path), [lst.relative_to(tmp_path)], cfg, "coloring")
+    assert out["sheet"] and Path(out["sheet"]).exists()
+    data = json.loads((page1.parent / "shortlist.json").read_text())
+    assert all(Path(c["path"]).is_absolute() and Path(c["path"]).exists() for c in data["candidates"])
