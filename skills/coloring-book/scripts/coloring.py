@@ -59,8 +59,8 @@ def cmd_sheet(args, cfg):
 def cmd_shortlist(args, cfg):
     from coloring_kit.shortlist import shortlist
 
-    _out(shortlist(Path(args.page), [Path(p) for p in args.candidates], cfg, args.kind,
-                   top=args.top, exclude=set(args.exclude_hash or []), convert=args.convert,
+    _out(shortlist(Path(args.page), [Path(p) for p in args.candidates], cfg,
+                   top=args.top, exclude=set(args.exclude_hash or []),
                    limit=args.limit, match=args.match))
 
 
@@ -105,7 +105,7 @@ def cmd_search(args, cfg):
     from coloring_kit.models import to_dict
     from coloring_kit.search import search
 
-    results = [to_dict(c) for c in search(args.query, args.kind, args.limit, cfg)]
+    results = [to_dict(c) for c in search(args.query, args.limit, cfg)]
     if args.out:
         Path(args.out).write_text(json.dumps(results, ensure_ascii=False, indent=1))
         _out({"found": len(results), "file": args.out})
@@ -173,27 +173,7 @@ def cmd_thumb(args, cfg):
 def cmd_lineart(args, cfg):
     from coloring_kit.lineart import to_lineart
 
-    _out(to_lineart(Path(args.image), Path(args.out), args.mode, cfg["profiles"][args.profile]))
-
-
-def cmd_generate(args, cfg):
-    from coloring_kit.generate import ProviderUnavailable, get_provider
-
-    if not cfg["generate"].get("enabled", False):
-        sys.exit("error: image generation is disabled (generate.enabled: false); "
-                 "the orchestrator must stop the job instead")
-    names = [args.provider] if args.provider else cfg["generate"]["providers"]
-    for name in names:
-        try:
-            provider = get_provider(name, cfg["generate"])
-        except ProviderUnavailable:
-            continue
-        w, h = (int(x) for x in args.size.split("x"))
-        image = provider.generate(args.prompt, (w, h), n=1)[0]
-        Path(args.out).write_bytes(image)
-        _out({"path": args.out, "provider": name})
-        return
-    sys.exit("no image generation provider available (missing API keys?)")
+    _out(to_lineart(Path(args.image), Path(args.out), cfg["profiles"][args.profile]))
 
 
 def cmd_pdf(args, cfg):
@@ -244,11 +224,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--page", required=True, help="page.json path")
     s.add_argument("--candidates", nargs="+", required=True,
                    help="JSON lists from `search --out` / `extract-images --out`")
-    s.add_argument("--kind", choices=["coloring", "image"], required=True)
     s.add_argument("--top", type=int, default=8)
     s.add_argument("--limit", type=int, default=40, help="max candidates to download")
-    s.add_argument("--convert", type=int, default=0,
-                   help="image kind: convert the top N convertible candidates for the sheet")
     s.add_argument("--exclude-hash", action="append")
     s.add_argument("--match", nargs="+",
                    help="keep only images whose file name/URL/title contains one of these words")
@@ -268,13 +245,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     conf = sub.add_parser("config", help="read effective configuration").add_subparsers(
         dest="config_cmd", required=True)
-    s = conf.add_parser("get", help="print a value, e.g. generate.enabled")
+    s = conf.add_parser("get", help="print a value, e.g. max_pages")
     s.add_argument("key")
     s.set_defaults(func=cmd_config_get)
 
     s = sub.add_parser("search", help="image search via configured providers")
     s.add_argument("--query", required=True)
-    s.add_argument("--kind", choices=["coloring", "image"], required=True)
     s.add_argument("--limit", type=int, default=20)
     s.add_argument("--out", help="write the list to this file and print only a summary")
     s.set_defaults(func=cmd_search)
@@ -297,7 +273,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("analyze", help="pixel metrics and profile fit (JSON list)")
     s.add_argument("--image", action="append", default=[], help="repeatable")
     s.add_argument("--dir", help="analyze all images in a directory")
-    s.add_argument("--sort", choices=["lineart", "convertibility"], help="sort best first")
+    s.add_argument("--sort", choices=["lineart"], help="sort best first")
     s.add_argument("--profile", choices=PROFILES, default="medium")
     s.set_defaults(func=cmd_analyze)
 
@@ -306,19 +282,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--out", help="default: <page dir>/thumbs/<name>.png")
     s.set_defaults(func=cmd_thumb)
 
-    s = sub.add_parser("lineart", help="cleanup or convert to printable line art")
+    s = sub.add_parser("lineart", help="clean up a found coloring page into printable line art")
     s.add_argument("--image", required=True)
     s.add_argument("--out", required=True)
-    s.add_argument("--mode", choices=["cleanup", "convert"], required=True)
     s.add_argument("--profile", choices=PROFILES, default="medium")
     s.set_defaults(func=cmd_lineart)
-
-    s = sub.add_parser("generate", help="generate an image via configured providers")
-    s.add_argument("--prompt", required=True)
-    s.add_argument("--out", required=True)
-    s.add_argument("--provider")
-    s.add_argument("--size", default="1024x1536")
-    s.set_defaults(func=cmd_generate)
 
     s = sub.add_parser("pdf", help="build the A4 PDF for a job")
     s.add_argument("--job", required=True)

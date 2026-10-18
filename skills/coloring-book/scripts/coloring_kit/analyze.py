@@ -59,27 +59,6 @@ def _lineart_score(gray: np.ndarray, color_ratio: float, gray_ratio: float, ink_
     return base * (0.3 + 0.7 * colorless) * (1 - 0.5 * shading) * (1 - 0.8 * solid)
 
 
-def _convertibility_score(rgb: np.ndarray, gray: np.ndarray) -> float:
-    lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
-    border = border_strip(lab)
-    bg = np.median(border, axis=0)
-    border_uniform = _ramp(float(np.linalg.norm(border - bg, axis=1).mean()), 30.0, 5.0)
-
-    fg = np.linalg.norm(lab - bg, axis=2) > 25
-    fill = float(fg.mean())
-    subject_fill = _in_band(fill, 0.15, 0.75, soft=1.0)
-    contrast = _ramp(float(np.abs(gray[fg].mean() - gray[~fg].mean())) if 0 < fill < 1 else 0.0, 10, 80)
-
-    # Flat colors (cartoon, clipart) convert cleanly; photos have hundreds of shades.
-    q = (rgb // 16).reshape(-1, 3)
-    codes = q[:, 0].astype(np.int32) * 256 + q[:, 1].astype(np.int32) * 16 + q[:, 2]
-    counts = np.sort(np.bincount(codes, minlength=4096))[::-1]
-    n90 = int(np.searchsorted(np.cumsum(counts), 0.9 * codes.size) + 1)
-    flatness = _ramp(n90, 250, 20)
-
-    return 0.3 * border_uniform + 0.2 * subject_fill + 0.2 * contrast + 0.3 * flatness
-
-
 def _text_likelihood(ink: np.ndarray) -> float:
     """Rows of small, similarly sized, closely spaced glyph-like blobs suggest text."""
     h, _ = ink.shape
@@ -138,7 +117,6 @@ def analyze(image: Path, profile: dict) -> ImageMetrics:
         width=width,
         height=height,
         lineart_score=round(_lineart_score(gray, color_ratio, gray_ratio, ink_ratio, solid_ratio), 3),
-        convertibility_score=round(_convertibility_score(rgb, gray), 3),
         color_ratio=round(color_ratio, 3),
         gray_ratio=round(gray_ratio, 3),
         ink_ratio=round(ink_ratio, 3),

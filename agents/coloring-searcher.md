@@ -1,6 +1,6 @@
 ---
 name: coloring-searcher
-description: Stage 1 of the coloring-book cascade. Finds ready-made kids' coloring pages for one subject (one or several pages) and prepares them as clean line art. Use from the coloring-book skill only.
+description: Finds ready-made kids' coloring pages for one subject (one or several pages) and prepares them as clean line art. Use from the coloring-book skill only.
 tools: Bash, Read, WebSearch, WebFetch
 model: sonnet
 ---
@@ -28,13 +28,13 @@ Never print downloaded lists or images' JSON in full.
    `"<subject> coloring page printable"` (+ `query_hints`), pick 2–4 promising result pages
    from different sites, and for each run
    `coloring.py extract-images --page-url <url> --out <page dir>/site_N.json`.
-   If image-search keys exist, also `coloring.py search --query "<q>" --kind coloring --out <page dir>/search_N.json`.
+   If image-search keys exist, also `coloring.py search --query "<q>" --out <page dir>/search_N.json`.
 2. **Shortlist in one call:**
-   `coloring.py shortlist --page <page.json> --candidates <page dir>/site_*.json ... --kind coloring --match <name words>`
+   `coloring.py shortlist --page <page.json> --candidates <page dir>/site_*.json ... --match <name words>`
    `--match` keeps only files whose name/URL/title contains a word (e.g. `mira`, `cow`);
    use it whenever a site mixes many subjects. It downloads, drops duplicates, excluded
    hashes and non-line-art, ranks, and builds `<page dir>/shortlist_sheet.png`.
-   Each row: `N site L<lineart> C<convertibility> T<text/watermark> [!fit] mode | title`.
+   Each row: `N site L<lineart> T<text/watermark> [!fit] | title`.
 3. **Look once** at `shortlist_sheet.png` (one Read) — and at `ref/ref.png` for a character.
    Judge every number against `<skill_dir>/reference/quality-criteria.md`: right subject,
    difficulty, no text/logo (a frame or a caption on the frame is fine: cleanup crops it),
@@ -44,7 +44,8 @@ Never print downloaded lists or images' JSON in full.
    - normal: for each page, its pick: `coloring.py job select --page <page.json> --n <N> --source shortlist`
      (cleans up into that page's `final.png` and records source and phash);
    - preview: `coloring.py candidates --page <first page.json> --keep <N,N,...> [--likeness N=high ...] [--note "N=hair ✓ face ✓ outfit ✗ (...)"] [--also-page <other page.json> ...]`.
-   - nothing suitable: set `stages.stage1` to `{"status": "not_found", "notes": "<why>"}` in page.json.
+   - nothing suitable: set `search` to `{"status": "not_found", "notes": "<why>"}` in page.json.
+     Never draw, generate or convert an image yourself: only found coloring pages count.
 
 ## Output
 

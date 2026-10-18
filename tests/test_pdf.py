@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from PIL import Image
 from reportlab.lib.pagesizes import A4
 
 from conftest import write_json
@@ -23,8 +24,10 @@ def job(images, cfg, tmp_path):
     created = init_job(JobSpec.from_dict(json.loads(json.dumps(SPEC))), tmp_path, cfg["max_pages"])
     job_dir = tmp_path / created["job_dir"]
     easy = cfg["profiles"]["easy"]
-    to_lineart(images / "coloring.png", job_dir / "pages/01/final.png", "cleanup", easy)
-    to_lineart(images / "clipart.png", job_dir / "pages/02/final.png", "convert", easy)
+    to_lineart(images / "coloring.png", job_dir / "pages/01/final.png", easy)
+    with Image.open(images / "coloring.png") as im:
+        im.rotate(90, expand=True).save(tmp_path / "landscape.png")
+    to_lineart(tmp_path / "landscape.png", job_dir / "pages/02/final.png", easy)
 
     def update(n, **fields):
         path = job_dir / f"pages/{n:02d}/page.json"
@@ -32,7 +35,7 @@ def job(images, cfg, tmp_path):
 
     update(1, status="accepted", final={"path": "final.png", "origin": "found",
                                          "source_page": "https://coloring.example.com/smiley"})
-    update(2, status="accepted", final={"path": "final.png", "origin": "converted",
+    update(2, status="accepted", final={"path": "final.png", "origin": "found",
                                          "source_url": "https://img.example.org/house.png"})
     update(3, status="failed")
     return job_dir
@@ -79,7 +82,7 @@ def test_no_pages_raises(job, cfg):
 def test_job_stop_records_reason(job):
     from coloring_kit.job import stop_job
 
-    result = stop_job(job, "generation_disabled", [3, 2])
+    result = stop_job(job, "nothing_found", [3, 2])
     state = json.loads((job / "job.json").read_text())
-    assert state["status"] == "stopped" and state["stop_reason"] == "generation_disabled"
+    assert state["status"] == "stopped" and state["stop_reason"] == "nothing_found"
     assert state["unresolved_pages"] == [2, 3] == result["unresolved_pages"]

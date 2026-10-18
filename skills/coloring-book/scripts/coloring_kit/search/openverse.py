@@ -1,10 +1,10 @@
-"""Openverse API (no key needed). Openly licensed images: good for clipart and
-illustrations (stage 2), weak for ready coloring pages."""
+"""Openverse API (no key needed). Openly licensed illustrations: a fallback with few
+ready coloring pages."""
 
 from __future__ import annotations
 
 from ..http import get
-from ..models import Candidate, Kind
+from ..models import Candidate
 
 ENDPOINT = "https://api.openverse.org/v1/images/"
 ANONYMOUS_PAGE_SIZE = 20
@@ -13,7 +13,7 @@ ANONYMOUS_PAGE_SIZE = 20
 class OpenverseProvider:
     name = "openverse"
 
-    def search(self, query: str, kind: Kind, limit: int, safe: bool = True) -> list[Candidate]:
+    def search(self, query: str, limit: int, safe: bool = True) -> list[Candidate]:
         params = {"q": query, "page_size": min(limit, ANONYMOUS_PAGE_SIZE),
                   "category": "illustration,digitized_artwork"}
         if safe:

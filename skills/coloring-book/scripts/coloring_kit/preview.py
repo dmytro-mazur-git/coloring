@@ -1,13 +1,11 @@
 """Candidate preview for the user: contact sheet from a page's candidates.json and
 applying the user's choice to the page.
 
-candidates.json (in the page dir), written by a stage subagent in preview mode:
+candidates.json (in the page dir), written by the searcher in preview mode:
 {
-  "stage": "stage1" | "stage2",
   "reference": "ref/ref.png" | null,          # official look of a character, if any
   "candidates": [
     {"n": 1, "path": "candidates/abc.png",    # relative to the page dir, or absolute
-     "mode": "cleanup" | "ready",             # cleanup: found line art; ready: already converted
      "source_url": "...", "source_page": "...",
      "why": "why it matches the subject", "likeness": "high" | "medium" | "low" | null,
      "note": "..."}
@@ -18,7 +16,6 @@ candidates.json (in the page dir), written by a stage subagent in preview mode:
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -112,20 +109,19 @@ def make_candidates(page_json: Path, keep: list[int], likeness: dict[int, str],
     cands = []
     for i, k in enumerate(keep, 1):
         c = dict(by_n[k])
-        for key in ("path", "preview", "original"):
+        for key in ("path", "preview"):
             if c.get(key):
                 c[key] = str(_resolve(page_dir, c[key]).resolve())
         c.update(n=i, shortlist_n=k, likeness=likeness.get(k), note=notes.get(k, c.get("note", "")))
         cands.append(c)
     ref = short.get("reference")
-    data = {"stage": short.get("stage", "stage1"),
-            "reference": str(_resolve(page_dir, ref).resolve()) if ref else None,
+    data = {"reference": str(_resolve(page_dir, ref).resolve()) if ref else None,
             "candidates": cands}
     sheets = []
     for target in [page_json, *also]:
         (target.parent / "candidates.json").write_text(json.dumps(data, ensure_ascii=False, indent=2))
         page = json.loads(target.read_text())
-        page.setdefault("stages", {}).setdefault(data["stage"], {})["status"] = "candidates"
+        page.setdefault("search", {})["status"] = "candidates"
         target.write_text(json.dumps(page, ensure_ascii=False, indent=2))
     sheets.append(str(build_sheet(page_dir)))
     for target in also:
@@ -151,29 +147,19 @@ def select_candidate(page_json: Path, n: int, profile: dict, source: str = "cand
             k += 1
         final.rename(page_dir / f"previous_final_{k}.png")
 
-    src = _resolve(page_dir, chosen["path"])
-    if chosen.get("mode") == "ready":
-        shutil.copyfile(src, final)
-        metrics = {"path": str(final)}
-    elif chosen.get("mode") == "convert":
-        metrics = to_lineart(src, final, "convert", profile)
-    else:
-        metrics = to_lineart(src, final, "cleanup", profile)
+    metrics = to_lineart(_resolve(page_dir, chosen["path"]), final, profile)
 
     with Image.open(final) as im:
         phash = perceptual_hash(im)
 
-    stage = data.get("stage", "stage1")
     page = json.loads(page_json.read_text())
-    page.setdefault("stages", {}).setdefault(stage, {}).update(
+    page.setdefault("search", {}).update(
         status="found", chosen=n, chosen_from=f"{source}.json")
     page["final"] = {
         "path": "final.png",
-        "origin": "found" if stage == "stage1" else "converted",
+        "origin": "found",
         "source_url": chosen.get("source_url"),
         "source_page": chosen.get("source_page"),
-        "provider": None,
-        "prompt": None,
         "phash": phash,
     }
     page["status"] = "selected"

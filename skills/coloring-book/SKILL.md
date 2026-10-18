@@ -1,12 +1,12 @@
 ---
 name: coloring-book
-description: Create printable A4 coloring pages (PDF, one or many pages) for children from a text description. Use when the user asks for a coloring page / coloring book / розмальовка / раскраска, e.g. "розмальовка з динозавром", "5 coloring pages of farm animals for a 4-year-old".
+description: Find ready-made kids' coloring pages online for a text description and print them as an A4 PDF (one or many pages). Use when the user asks for a coloring page / coloring book / розмальовка / раскраска, e.g. "розмальовка з динозавром", "5 coloring pages of farm animals for a 4-year-old".
 ---
 
 # Coloring book orchestrator
 
 You orchestrate the creation of a kids' coloring-page PDF. You plan and coordinate;
-the heavy image work happens in subagents and in the `coloring.py` toolkit.
+the image search happens in subagents and in the `coloring.py` toolkit.
 Full design: `docs/architecture.md` in the plugin repo.
 
 Paths below are relative to this skill's base directory (`SKILL_DIR`).
@@ -46,19 +46,14 @@ Ask the user only if the subject itself is unclear. Otherwise proceed with defau
 Write the spec to a temp file and run `coloring.py job init --spec <file>`.
 It prints the job directory and the per-page `page.json` paths.
 
-Also run `coloring.py config get generate.enabled` once: it decides whether stage 3 exists.
+## Step 2 — Search (pages in parallel)
 
-## Step 2 — Source cascade (stage by stage, pages in parallel)
+Pages come only from ready-made coloring pages found online: nothing is generated and
+no photo or clipart is converted into line art.
 
-Run each stage for all still-open pages **in parallel** (one subagent per page, at most
+Run `coloring:coloring-searcher` for all pages **in parallel** (at most
 `max_parallel_agents` from `config.yaml` at once). Pass each subagent: the absolute
-`page.json` path, the absolute `skill_dir`, and the difficulty profile.
-
-1. `coloring:coloring-searcher` — ready-made coloring pages.
-2. `coloring:image-scout` — for pages still `not_found`: images that convert well to line art.
-3. `coloring:illustrator` — for pages still open: generate with an external API.
-   **Only if `generate.enabled` is true.** Otherwise go to "Stopping" below as soon as
-   stage 2 leaves any page open.
+`page.json` path(s), the absolute `skill_dir`, and the difficulty profile.
 
 Pages of the same subject or character (`variants`, or "each girl twice") go to ONE
 subagent: pass all their `page.json` paths; it searches once and picks a different picture
@@ -71,14 +66,18 @@ earlier picks, and end with: "Final message: only the JSON lines from your Outpu
 Subagents return a short JSON summary; details are in `page.json`. Do not open candidate
 images yourself — keep your context small. (Exception: the contact sheet below.)
 
-**Preview mode** (`preview: true`): a stage subagent returns `"status": "candidates"` with a
+A page the searcher returns as `not_found` gets one more search round only if you can give
+the subagent something new (other query wording, a related simpler subject the user would
+accept). Otherwise it is `failed`.
+
+**Preview mode** (`preview: true`): the subagent returns `"status": "candidates"` with a
 contact sheet instead of a pick. Look at the sheet once, then show it to the user
 (send the file if you can, otherwise give its path) with one line per number (site, why it
 matches, likeness to the reference), recommend one, and **stop and wait** for the user's
 choice. Then run `coloring.py job select --page <page.json> --n <N>` (several numbers →
 several pages: give each extra pick its own page) and continue with Step 3. If the user
-likes none, run the stage again in preview mode, telling the subagent to exclude the hashes
-of everything already shown; if stage 1 is exhausted, go on to stage 2.
+likes none, run the search again in preview mode, telling the subagent to exclude the
+hashes of everything already shown.
 
 **User rejects a finished page** ("не подобається", "не схожий"): treat it as a new search
 for that page with `preview: true`. Keep the job; pass the rejected `final.phash` as an
@@ -96,29 +95,26 @@ User-chosen pages are rejected only for hard defects (safety, text, gray fills).
 Use the `coloring:quality-inspector` subagent only for books over 9 pages or when you need
 a second opinion on specific pages.
 
-For each `reject`: send the page to the next stage of the cascade once
-(stage 1 → 2 → 3). A rejected stage-3 page gets one more illustrator attempt, then `failed`.
-With generation disabled, a rejected page whose next stage would be 3 means "Stopping".
+For each `reject`: run the searcher once more for that page, excluding the rejected
+`final.phash`. A page rejected again is `failed`.
 
 ## Step 4 — Build the PDF and report
 
 Run `coloring.py pdf --job <job dir>`. Then tell the user, in their language:
 
 - the PDF path,
-- per page: subject and origin (found / converted / generated, with source domain),
-- which pages failed and why, with a suggestion (rephrase, different subject).
+- per page: subject and source domain,
+- which pages failed and why, with a suggestion (rephrase, different or more common subject).
 
 Failed pages never block the PDF if at least one page succeeded.
 
-## Stopping (generation needed but disabled)
+## Nothing found
 
-When a page can only be completed by generation and `generate.enabled` is false:
+When no page has an accepted image:
 
-1. Do not start any further subagents and do not build the PDF.
-2. Run `coloring.py job stop --job <job dir> --reason generation_disabled --pages <n,...>`
-   listing every page still without an accepted image.
-3. Tell the user, in their language: the job was stopped because these pages
-   (subject, short reason from `page.json` stage notes) had no suitable ready-made or
-   convertible image and generation is turned off. Suggest a different or more common
-   subject, or enabling generation later. Mention the job directory: candidates found so
-   far are kept there.
+1. Do not build the PDF.
+2. Run `coloring.py job stop --job <job dir> --reason nothing_found --pages <n,...>`.
+3. Tell the user, in their language, that no suitable ready-made coloring page was found
+   for these subjects (short reason from each `page.json` `search.notes`), and suggest a
+   different or more common subject. Mention the job directory: candidates found so far are
+   kept there.

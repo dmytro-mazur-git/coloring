@@ -1,24 +1,20 @@
 # coloring
 
-Плагін для **Claude Code**: за текстовим описом створює PDF формату A4 з розмальовками для дітей (одна або кілька сторінок).
+Плагін для **Claude Code**: за текстовим описом знаходить в інтернеті готові розмальовки для дітей і збирає з них PDF формату A4 (одна або кілька сторінок).
 
-Джерело кожної сторінки обирається каскадом:
-
-1. **Готова розмальовка** з інтернету.
-2. **Зображення, придатне для конвертації**, перетворене на контурний малюнок.
-3. **Генерація** через зовнішнє API.
+Плагін лише шукає: генерації зображень і перетворення фото чи кліпарту на контурний малюнок немає. Знайдена розмальовка очищується (поля, рамка з підписами сайту, сірі заливки) і верстається в PDF. Якщо для сторінки нічого не знайшлося, вона пропускається з поясненням.
 
 Архітектура описана в [docs/architecture.md](docs/architecture.md).
 
-> Статус: **v0.4**. Працюють `job init`, `search` (SerpAPI, Brave, Openverse), `extract-images`, `fetch`, `analyze`, `thumb`, `lineart` (cleanup/convert) і `pdf`. Генерація поки заглушка з визначеним інтерфейсом.
+> Статус: **v0.5**. Працюють `job init`, `search` (SerpAPI, Brave, Openverse), `extract-images`, `fetch`, `shortlist`, `analyze`, `thumb`, `lineart` (очищення), `review-sheet` і `pdf`.
 
 ## Структура
 
 | Шлях | Що це |
 |------|-------|
 | `.claude-plugin/` | маніфест плагіна та marketplace |
-| `skills/coloring-book/SKILL.md` | оркестратор: планування, каскад, звіт |
-| `agents/` | субагенти `coloring-searcher`, `image-scout`, `illustrator`, `quality-inspector` |
+| `skills/coloring-book/SKILL.md` | оркестратор: планування, пошук, перевірка, звіт |
+| `agents/` | субагенти `coloring-searcher`, `quality-inspector` |
 | `skills/coloring-book/scripts/coloring.py` | toolkit CLI (JSON у stdout) |
 | `skills/coloring-book/config.yaml` | налаштування за замовчуванням |
 | `skills/coloring-book/reference/` | критерії якості, профілі складності, схема даних, правила для персонажів і показу кандидатів |
@@ -36,8 +32,8 @@ pip install -r skills/coloring-book/scripts/requirements.txt
 /plugin install coloring@coloring
 ```
 
-Ключі API задаються змінними середовища (потрібен хоча б один ключ для пошуку і для генерації; Openverse працює без ключа):
-`SERPAPI_API_KEY`, `BRAVE_API_KEY`, `OPENAI_API_KEY`, `REPLICATE_API_TOKEN`, `FAL_KEY`.
+Ключі API пошуку задаються змінними середовища й необов'язкові (без них працюють сайти розмальовок через WebSearch і Openverse):
+`SERPAPI_API_KEY`, `BRAVE_API_KEY`.
 
 ## Тести
 
@@ -46,11 +42,11 @@ pip install -r skills/coloring-book/scripts/requirements.txt -r tests/requiremen
 python3 -m pytest tests
 ```
 
-Тести генерують синтетичні зображення самі й перевіряють метрики, конвертацію в line-art для всіх профілів складності та верстку PDF.
+Тести генерують синтетичні зображення самі й перевіряють метрики, очищення line-art для всіх профілів складності, шортлист і верстку PDF.
 
 ## Використання
 
-> Зроби розмальовку «тварини ферми» для 4-річної дитини, 5 сторінок, з підписами
+> Знайди розмальовку «тварини ферми» для 4-річної дитини, 5 сторінок, з підписами
 
 Результат з'являється в `output/<дата>_<тема>_<id>/<тема>.pdf`.
 

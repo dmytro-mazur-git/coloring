@@ -8,8 +8,6 @@ from typing import Literal
 Mode = Literal["variants", "set"]
 Difficulty = Literal["easy", "medium", "hard"]
 Orientation = Literal["auto", "portrait", "landscape"]
-Kind = Literal["coloring", "image"]
-Origin = Literal["found", "converted", "generated"]
 
 
 @dataclass
@@ -63,7 +61,6 @@ class ImageMetrics:
     width: int
     height: int
     lineart_score: float
-    convertibility_score: float
     color_ratio: float          # share of saturated pixels
     gray_ratio: float           # share of mid-gray pixels
     ink_ratio: float            # share of dark (ink) pixels

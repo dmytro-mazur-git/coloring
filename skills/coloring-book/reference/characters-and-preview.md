@@ -29,12 +29,11 @@ saying "Baby" does not make the drawing look like Baby. So, before judging candi
 ## Preview mode
 
 When `page.json` has `"preview": true`, the user wants to see candidates and choose.
-The stage subagent then **does not pick and does not write `final.png`**. Instead it:
+The searcher then **does not pick and does not write `final.png`**. Instead it:
 
 1. Builds the shortlist as usual (`coloring.py shortlist ...`, see the agent file) and looks
    at `shortlist_sheet.png` next to `ref/ref.png`. Drops wrong subjects, unsafe pictures,
-   text/logos that cleanup cannot crop, and `low` likeness. For stage 2 the sheet already
-   shows converted results.
+   text/logos that cleanup cannot crop, and `low` likeness.
 2. Keeps the best **2–6**, best first, with one command that writes `candidates.json`
    (renumbered 1..k, absolute paths), copies it to the other pages of the same subject and
    builds `candidates_sheet.png` (REF tile + numbers):

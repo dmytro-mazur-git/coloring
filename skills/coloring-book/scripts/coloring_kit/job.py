@@ -37,7 +37,7 @@ def init_job(spec: JobSpec, output_dir: Path, max_pages: int) -> dict:
             "reference": None,
             "exclude_hashes": [],
             "status": "planned",
-            "stages": {},
+            "search": {},
             "final": None,
             "inspection": None,
         }

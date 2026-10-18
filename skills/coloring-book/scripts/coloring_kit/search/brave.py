@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 from ..http import get
-from ..models import Candidate, Kind
+from ..models import Candidate
 from .base import ProviderUnavailable
 
 ENDPOINT = "https://api.search.brave.com/res/v1/images/search"
@@ -19,7 +19,7 @@ class BraveProvider:
         if not self.api_key:
             raise ProviderUnavailable("BRAVE_API_KEY is not set")
 
-    def search(self, query: str, kind: Kind, limit: int, safe: bool = True) -> list[Candidate]:
+    def search(self, query: str, limit: int, safe: bool = True) -> list[Candidate]:
         # Brave has no image-type filter: the query wording carries the intent.
         params = {"q": query, "count": min(limit, 100), "safesearch": "strict" if safe else "off"}
         headers = {"X-Subscription-Token": self.api_key, "Accept": "application/json"}

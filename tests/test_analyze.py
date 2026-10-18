@@ -15,14 +15,6 @@ def test_lineart_score_ranks_coloring_page_above_others(images, cfg):
     assert noise.lineart_score < threshold
 
 
-def test_convertibility_prefers_flat_clipart_over_noise(images, cfg):
-    p = cfg["profiles"]["medium"]
-    clipart = analyze(images / "clipart.png", p)
-    noise = analyze(images / "noise.png", p)
-    assert clipart.convertibility_score >= cfg["thresholds"]["convertibility_score_min"]
-    assert noise.convertibility_score < cfg["thresholds"]["convertibility_score_min"]
-
-
 def test_line_width_ignores_gray_shading(images, cfg):
     m = analyze(images / "coloring.png", cfg["profiles"]["medium"])
     # 5-6 px strokes on an 850x1100 page scale ~2.6x to A4 at 300 DPI.

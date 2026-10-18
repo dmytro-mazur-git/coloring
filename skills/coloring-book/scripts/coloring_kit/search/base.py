@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from ..models import Candidate, Kind
+from ..models import Candidate
 
 
 class ProviderUnavailable(Exception):
@@ -12,8 +12,8 @@ class ProviderUnavailable(Exception):
 class ImageSearchProvider(Protocol):
     name: str
 
-    def search(self, query: str, kind: Kind, limit: int, safe: bool = True) -> list[Candidate]:
-        """Return image candidates. `kind` tunes the query/filters (line art vs. any image)."""
+    def search(self, query: str, limit: int, safe: bool = True) -> list[Candidate]:
+        """Return image candidates (line-art coloring pages where the provider can filter)."""
         ...
 
 
@@ -25,7 +25,7 @@ def get_provider(name: str) -> ImageSearchProvider:
     return registry[name]()
 
 
-def search(query: str, kind: Kind, limit: int, cfg: dict) -> list[Candidate]:
+def search(query: str, limit: int, cfg: dict) -> list[Candidate]:
     """Query providers in order; the first one returning results wins.
     Provider errors are skipped; candidates with blocked words in the title are dropped."""
     from ..http import HttpError
@@ -35,7 +35,7 @@ def search(query: str, kind: Kind, limit: int, cfg: dict) -> list[Candidate]:
     blocked = [w.lower() for w in scfg.get("blocked_words", [])]
     for name in scfg["providers"]:
         try:
-            results = get_provider(name).search(query, kind, limit, safe)
+            results = get_provider(name).search(query, limit, safe)
         except (ProviderUnavailable, HttpError, ValueError):
             continue
         results = [c for c in results if not any(w in (c.title or "").lower() for w in blocked)]

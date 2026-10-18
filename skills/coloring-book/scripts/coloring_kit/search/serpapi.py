@@ -1,7 +1,6 @@
 """Google Images via SerpAPI (engine=google_images, safe=active).
 
-kind=coloring uses Google's "line drawing" type filter, kind=image the "clip art" one:
-clipart converts to line art far better than photos.
+Uses Google's "line drawing" type filter: coloring pages are line art.
 """
 
 from __future__ import annotations
@@ -9,11 +8,11 @@ from __future__ import annotations
 import os
 
 from ..http import get
-from ..models import Candidate, Kind
+from ..models import Candidate
 from .base import ProviderUnavailable
 
 ENDPOINT = "https://serpapi.com/search.json"
-TYPE_FILTER = {"coloring": "itp:lineart", "image": "itp:clipart"}
+TYPE_FILTER = "itp:lineart"
 
 
 class SerpApiProvider:
@@ -24,9 +23,9 @@ class SerpApiProvider:
         if not self.api_key:
             raise ProviderUnavailable("SERPAPI_API_KEY is not set")
 
-    def search(self, query: str, kind: Kind, limit: int, safe: bool = True) -> list[Candidate]:
+    def search(self, query: str, limit: int, safe: bool = True) -> list[Candidate]:
         params = {"engine": "google_images", "q": query, "api_key": self.api_key,
-                  "tbs": TYPE_FILTER[kind], "safe": "active" if safe else "off"}
+                  "tbs": TYPE_FILTER, "safe": "active" if safe else "off"}
         data = get(ENDPOINT, params=params, timeout=30).json()
         return [
             Candidate(url=r["original"], source_page=r.get("link"), thumb_url=r.get("thumbnail"),

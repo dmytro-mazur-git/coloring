@@ -35,23 +35,17 @@
   "chosen_by_user": false,
   "exclude_hashes": [],
   "status": "planned | selected | accepted | rejected | failed",
-  "stages": {
-    "stage1": {"status": "found | not_found | candidates", "queries": [], "checked": 0, "candidate": null, "score": null, "notes": ""},
-    "stage2": {"...": "same shape"},
-    "stage3": {"status": "done | failed", "prompts": [], "attempts": 0, "score": null, "notes": ""}
-  },
+  "search": {"status": "found | not_found | candidates", "chosen": null, "chosen_from": "shortlist.json | candidates.json", "notes": ""},
   "final": {
     "path": "final.png",
-    "origin": "found | converted | generated",
+    "origin": "found",
     "source_url": null,
     "source_page": null,
-    "provider": null,
-    "prompt": null,
     "phash": null
   },
   "inspection": {"verdict": "accept | reject", "score": 0, "reasons": []}
 }
 ```
 
-Ownership: a stage subagent writes only its own `pages/NN/` directory. Only the
+Ownership: the searcher subagent writes only its own `pages/NN/` directory. Only the
 orchestrator (via `coloring.py`) writes `job.json`.

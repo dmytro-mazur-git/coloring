@@ -1,7 +1,7 @@
 {
   "name": "coloring",
   "version": "0.1.0",
-  "description": "Generates printable A4 coloring-page PDFs for kids from a text description: finds ready coloring pages, converts suitable images to line art, or generates new ones.",
+  "description": "Finds ready-made kids' coloring pages online for a text description and prints them as an A4 PDF.",
   "author": {
     "name": "Dmytro Mazur"
   },

@@ -5,7 +5,6 @@ from PIL import Image
 
 from conftest import write_json
 from coloring_kit.job import init_job
-from coloring_kit.lineart import to_lineart
 from coloring_kit.models import JobSpec
 from coloring_kit.preview import build_sheet, select_candidate
 
@@ -22,15 +21,13 @@ def page(images, cfg, tmp_path):
     page_dir = page_json.parent
     (page_dir / "ref").mkdir()
     Image.open(images / "clipart.png").save(page_dir / "ref" / "ref.png")
-    converted = page_dir / "conv_1.png"
-    to_lineart(images / "clipart.png", converted, "convert", cfg["profiles"]["medium"])
     write_json(page_dir / "candidates.json", {
-        "stage": "stage1", "reference": "ref/ref.png",
+        "reference": "ref/ref.png",
         "candidates": [
-            {"n": 1, "path": str(images / "coloring.png"), "mode": "cleanup",
+            {"n": 1, "path": str(images / "coloring.png"),
              "source_url": "https://a.test/baby.png", "source_page": "https://a.test/kpop",
              "why": "file baby.png", "likeness": "high", "note": ""},
-            {"n": 2, "path": "conv_1.png", "mode": "ready",
+            {"n": 2, "path": str(images / "watermarked.png"),
              "source_url": "https://b.test/x.png", "source_page": "https://b.test/",
              "why": "alt 'Baby'", "likeness": "medium", "note": ""},
         ]})
@@ -56,8 +53,8 @@ def test_select_cleans_up_and_records_choice(page, cfg):
     assert (page.parent / "final.png").exists() and result["selected"] == 1
     assert data["status"] == "selected" and data["chosen_by_user"] is True
     assert data["final"]["source_url"] == "https://a.test/baby.png"
-    assert data["stages"]["stage1"]["chosen"] == 1
-    assert data["stages"]["stage1"]["chosen_from"] == "candidates.json"
+    assert data["search"]["chosen"] == 1
+    assert data["search"]["chosen_from"] == "candidates.json"
 
 
 def test_reselect_keeps_previous_final(page, cfg):

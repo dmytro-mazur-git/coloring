@@ -32,7 +32,7 @@ def job(images, cfg, tmp_path, monkeypatch):
 
 def test_shortlist_coloring_filters_and_ranks(job, cfg):
     (page1, _), lst = job
-    out = shortlist(page1, [lst], cfg, "coloring")
+    out = shortlist(page1, [lst], cfg)
     data = json.loads((page1.parent / "shortlist.json").read_text())
     urls = [c["source_url"] for c in data["candidates"]]
     # Clean coloring page first, the watermarked copy is a near-duplicate or ranked lower,
@@ -44,32 +44,30 @@ def test_shortlist_coloring_filters_and_ranks(job, cfg):
 
 def test_shortlist_match_filters_before_download(job, cfg):
     (page1, _), lst = job
-    out = shortlist(page1, [lst], cfg, "image", match=["house"], convert=1)
-    assert out["skipped"]["no name match"] == 3
+    out = shortlist(page1, [lst], cfg, match=["smiley"])
+    assert out["skipped"]["no name match"] == 2
     data = json.loads((page1.parent / "shortlist.json").read_text())
-    assert data["stage"] == "stage2"
-    assert data["candidates"][0]["mode"] == "ready"           # converted for the sheet
-    assert (page1.parent / "conv_1.png").exists()
+    assert all("smiley" in c["source_url"] for c in data["candidates"])
 
 
 def test_shortlist_rerun_reuses_downloads(job, cfg):
     (page1, _), lst = job
-    first = shortlist(page1, [lst], cfg, "coloring")
-    again = shortlist(page1, [lst], cfg, "coloring")
+    first = shortlist(page1, [lst], cfg)
+    again = shortlist(page1, [lst], cfg)
     assert again["shortlisted"] == first["shortlisted"] and "duplicate" not in again["skipped"]
 
 
 def test_agent_pick_from_shortlist(job, cfg):
     (page1, _), lst = job
-    shortlist(page1, [lst], cfg, "coloring")
+    shortlist(page1, [lst], cfg)
     select_candidate(page1, 1, cfg["profiles"]["medium"], source="shortlist", by_user=False)
     data = json.loads(page1.read_text())
-    assert data["chosen_by_user"] is False and data["stages"]["stage1"]["chosen_from"] == "shortlist.json"
+    assert data["chosen_by_user"] is False and data["search"]["chosen_from"] == "shortlist.json"
 
 
 def test_candidates_from_shortlist_for_two_pages(job, cfg):
     (page1, page2), lst = job
-    shortlist(page1, [lst], cfg, "image", convert=2)
+    shortlist(page1, [lst], cfg)
     n = len(json.loads((page1.parent / "shortlist.json").read_text())["candidates"])
     keep = list(range(n, 0, -1))
     out = make_candidates(page1, keep, {keep[0]: "high"}, {keep[0]: "hair ✓"}, [page2])
@@ -96,7 +94,7 @@ def test_review_sheet_and_verdict(job, cfg, images):
 def test_shortlist_with_relative_page_path(job, cfg, tmp_path, monkeypatch):
     (page1, _), lst = job
     monkeypatch.chdir(tmp_path)
-    out = shortlist(page1.relative_to(tmp_path), [lst.relative_to(tmp_path)], cfg, "coloring")
+    out = shortlist(page1.relative_to(tmp_path), [lst.relative_to(tmp_path)], cfg)
     assert out["sheet"] and Path(out["sheet"]).exists()
     data = json.loads((page1.parent / "shortlist.json").read_text())
     assert all(Path(c["path"]).is_absolute() and Path(c["path"]).exists() for c in data["candidates"])
