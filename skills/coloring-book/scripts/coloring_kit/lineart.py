@@ -5,19 +5,15 @@ cleanup (stage 1 and 3 outputs, already line art):
     -> finish.
 
 convert (stage 2, regular images):
-    denoise -> resize to a fixed working size (small images are upscaled, so traced
-    boundaries come out smooth) -> the drawing's own outlines: anything thinner than
-    a few % of the image and darker than its surroundings, whatever its hue
-    (black-hat on Lab L) -> k-means color regions in Lab, background as its own
-    region -> lines = outlines | boundaries between regions (the boundaries on both
-    sides of an outline merge with it into one line) -> crop -> print size ->
-    every stroke redrawn from its centre line at the profile's width; small solid
-    shapes (pupils, noses) stay solid.
+    resize -> bilateral denoise -> white-out a uniform background -> k-means color
+    quantization in Lab -> mode filter -> boundaries between color regions
+    (+ Canny detail edges for medium/hard) -> crop -> scale to print size -> finish.
 
-finish (cleanup):
+finish (both):
     drop specks -> big solid black fills (much thicker than the drawing's own lines)
-    become outlines -> too-thin lines are thickened (the artist's strokes are kept)
-    -> close small gaps -> drop specks again.
+    become outlines -> stroke width: cleanup only thickens too-thin lines (keeps the
+    artist's strokes); convert redraws off-profile lines from the skeleton at the
+    profile's target width -> close small gaps -> drop specks again.
 """
 
 from __future__ import annotations
@@ -37,6 +33,7 @@ from .imaging import (
     fit_scale,
     load_rgb,
     remove_small_components,
+    resize_long,
     save_ink,
     stroke_width,
     to_gray,
@@ -44,7 +41,7 @@ from .imaging import (
 
 Mode = Literal["cleanup", "convert"]
 
-CONVERT_WORK_LONG_SIDE = 2400  # convert works at this size: small images are upscaled
+CONVERT_WORK_LONG_SIDE = 1200
 FRAME_LINE_FRAC = 0.45        # cleanup: a row/column this full of ink is a frame line
 FRAME_EDGE_ZONE = 0.2         # ...when it lies within this share of the image from an edge
 DARK_THRESHOLD = 110          # cleanup: gray below this is always ink
@@ -52,10 +49,8 @@ LIGHT_LINE_MAX_THRESHOLD = 200  # cleanup: upper bound of the adaptive ink thres
 BG_UNIFORM_MAX_DIST = 18.0    # mean Lab distance of the border to call the background uniform
 BG_MATCH_DIST = 12.0          # Lab distance of a pixel to the background color
 BG_LABEL = 255                # label reserved for the background region
-OUTLINE_MAX_FRAC = 0.06       # convert: dark strokes thinner than this share of the long side are outlines
-OUTLINE_CONTRAST = 40         # ...when darker than their surroundings by this much (Lab L, 0..255)
-EXTRA_COLORS = 8              # convert: k-means colors on top of the profile's kmeans_k
-SOLID_DETAIL_FRAC = 0.025     # convert: compact solid shapes smaller than this share stay solid
+PARALLEL_MERGE_PX = 5         # convert: lines closer than this (work px) merge into one
+DARK_LAB_L = 70               # OpenCV Lab L (0..255) below which a color cluster is ink
 FILL_WIDTH_FACTOR = 3         # ink thicker than this × max line width is a solid fill
 
 
@@ -63,12 +58,13 @@ def to_lineart(image: Path, out: Path, mode: Mode, profile: dict) -> dict:
     """Write the line-art PNG to `out` and return metrics of the result."""
     rgb = load_rgb(image)
     if mode == "cleanup":
-        ink = _finish(_cleanup(rgb), profile)
+        ink = _cleanup(rgb)
     elif mode == "convert":
-        ink = _redraw(_convert(rgb, profile), profile)
+        ink = _convert(rgb, profile)
     else:
         raise ValueError(f"unknown mode: {mode}")
 
+    ink = _finish(ink, profile, mode)
     if not ink.any():
         raise ValueError("no line art left after processing")
     save_ink(ink, out)
@@ -143,75 +139,48 @@ def _cleanup(rgb: np.ndarray) -> np.ndarray:
 
 
 def _convert(rgb: np.ndarray, profile: dict) -> np.ndarray:
-    """Line mask at working size: the drawing's own outlines plus color-region boundaries."""
-    rgb = cv2.bilateralFilter(rgb, 5, 30, 5)          # JPEG noise, before upscaling it
-    h, w = rgb.shape[:2]
-    s = CONVERT_WORK_LONG_SIDE / max(h, w)
-    work = cv2.resize(rgb, (round(w * s), round(h * s)),
-                      interpolation=cv2.INTER_CUBIC if s > 1 else cv2.INTER_AREA)
-    smooth = cv2.bilateralFilter(work, 9, 40, 9)
+    work = resize_long(rgb, CONVERT_WORK_LONG_SIDE)
+    smooth = cv2.bilateralFilter(work, 9, 60, 60)
+    smooth = cv2.bilateralFilter(smooth, 9, 60, 60)
+
     lab = cv2.cvtColor(smooth, cv2.COLOR_RGB2LAB).astype(np.float32)
     background = _background_mask(lab)
 
-    # The drawing's own outlines are thin and darker than what is around them, but
-    # not necessarily black (brown, deep pink): black-hat on lightness finds them.
-    light = lab[..., 0].astype(np.uint8)
-    reach = max(15, round(OUTLINE_MAX_FRAC * max(light.shape)))
-    blackhat = cv2.morphologyEx(light, cv2.MORPH_BLACKHAT, disk(reach))
-    outlines = cv2.GaussianBlur(blackhat, (0, 0), 1.5) > OUTLINE_CONTRAST
-    outlines = cv2.morphologyEx(outlines.astype(np.uint8), cv2.MORPH_OPEN, disk(3)) > 0
-
-    labels, _ = _quantize(lab, profile.get("kmeans_k", 10) + EXTRA_COLORS)
-    labels = cv2.medianBlur(labels, 7)
+    labels, centers = _quantize(lab, profile.get("kmeans_k", 10))
     if background is not None:
         # The background is its own region, so the subject's silhouette is always
         # outlined, even where the subject's color is close to the background's.
         labels[background] = BG_LABEL
     labels = cv2.medianBlur(labels, 7)
+    labels = cv2.medianBlur(labels, 5)
+
+    # Near-black clusters are the drawing's own outlines (cartoons) or solid black
+    # parts: they are ink as they are. Boundaries are taken only between lighter
+    # regions, otherwise every black outline would turn into a double line.
+    dark = np.isin(labels, np.flatnonzero(centers[:, 0] < DARK_LAB_L))
     edges = np.zeros(labels.shape, dtype=bool)
     edges[:, 1:] |= labels[:, 1:] != labels[:, :-1]
     edges[1:, :] |= labels[1:, :] != labels[:-1, :]
+    edges &= ~(cv2.dilate(dark.astype(np.uint8), disk(5)) > 0)
+    edges |= dark
 
-    # Boundaries run on both sides of an outline; joined with the outline itself
-    # they make one solid stroke, which _redraw turns into a single line.
-    lines = outlines | (cv2.dilate(edges.astype(np.uint8), disk(3)) > 0)
-    subject = lines if background is None else (lines | ~background)
-    return lines[_crop_box(subject)]
+    if profile.get("detail_edges", False):
+        gray = cv2.cvtColor(smooth, cv2.COLOR_RGB2GRAY)
+        detail = cv2.Canny(gray, 60, 160) > 0
+        if background is not None:
+            detail &= ~background
+        edges |= detail & ~(cv2.dilate(dark.astype(np.uint8), disk(5)) > 0)
 
+    # Region boundaries and Canny edges often run as near-parallel pairs a few pixels
+    # apart: merge them so _finish redraws a single line from the skeleton.
+    edges = cv2.morphologyEx(edges.astype(np.uint8), cv2.MORPH_CLOSE, disk(PARALLEL_MERGE_PX)) > 0
 
-def _redraw(lines: np.ndarray, profile: dict) -> np.ndarray:
-    """Scale the traced lines to print size and redraw every stroke from its centre
-    line at the profile's width. Small compact solid shapes (pupils, noses) stay solid."""
-    min_area = profile["min_component_area_px"]
-    lo, hi = profile["line_px"]
-    target = (lo + hi) / 2
+    subject = edges if background is None else (edges | ~background)
+    edges = edges[_crop_box(subject)]
 
-    h, w = lines.shape
-    s = fit_scale(w, h)
-    scaled = cv2.resize(lines.astype(np.float32), (round(w * s), round(h * s)),
-                        interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_LINEAR)
-    ink = cv2.morphologyEx((scaled > 0.5).astype(np.uint8), cv2.MORPH_CLOSE, disk(3)) > 0
-    ink = remove_small_components(ink, min_area)
-    # Pinholes inside bold strokes would turn into ladders on the centre line.
-    ink = ~remove_small_components(~ink, round((2.5 * target) ** 2))
-
-    n, comp, stats, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8), connectivity=8)
-    bw, bh, area = stats[:, cv2.CC_STAT_WIDTH], stats[:, cv2.CC_STAT_HEIGHT], stats[:, cv2.CC_STAT_AREA]
-    side = np.maximum(bw, bh)
-    solid = ((side < SOLID_DETAIL_FRAC * max(ink.shape)) & (side > 2 * hi)
-             & (area > 0.6 * bw * bh))
-    solid[0] = False
-    solid = solid[comp]
-
-    # No blur before skeletonizing: it would erase thin lines and break strokes.
-    dist = cv2.distanceTransform(ink.astype(np.uint8), cv2.DIST_L2, 5)
-    spur = round(max(3 * target, 2 * float(np.percentile(dist[ink], 90)))) if ink.any() else 0
-    skeleton = _prune_spurs(skeletonize(ink & ~solid), max_len=spur)
-    ink = (cv2.dilate(skeleton.astype(np.uint8), disk(target)) > 0) | solid
-    # Smooth the stair-steps of the redrawn strokes.
-    ink = cv2.GaussianBlur(ink.astype(np.float32), (0, 0), max(1.0, target / 3)) > 0.5
-    ink = remove_small_components(ink, min_area)
-    return crop_to_content(ink)
+    # Upscale the 1-px edges smoothly; _finish thickens them to the profile.
+    scaled = _scale_to_print(edges.astype(np.float32))
+    return scaled > 0.25
 
 
 def _background_mask(lab: np.ndarray) -> np.ndarray | None:
@@ -254,9 +223,7 @@ def _quantize(lab: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
     return labels.reshape(lab.shape[:2]), centers
 
 
-def _finish(ink: np.ndarray, profile: dict) -> np.ndarray:
-    """Cleanup of found line art: keeps the artist's strokes (tapering, solid eyes and
-    brows); big solid fills become outlines and too-thin lines are thickened."""
+def _finish(ink: np.ndarray, profile: dict, mode: Mode) -> np.ndarray:
     min_area = profile["min_component_area_px"]
     lo, hi = profile["line_px"]
     target = (lo + hi) / 2
@@ -264,8 +231,17 @@ def _finish(ink: np.ndarray, profile: dict) -> np.ndarray:
     ink = remove_small_components(ink, min_area)
     ink = _outline_fills(ink, hi, target)
     width = stroke_width(ink)
-    if 0 < width < lo:
-        ink = cv2.dilate(ink.astype(np.uint8), disk(target - width + 1)) > 0
+    if mode == "cleanup":
+        # Found line art keeps the artist's strokes (tapering, solid eyes and brows):
+        # too-thin lines are thickened, which keeps shapes; thick lines stay as drawn.
+        if 0 < width < lo:
+            ink = cv2.dilate(ink.astype(np.uint8), disk(target - width + 1)) > 0
+    elif width and not lo <= width <= hi:
+        # Converted edges are our own lines: redraw them uniformly from the skeleton.
+        # Smooth jagged edges first: they turn into spurs on the skeleton.
+        smooth = cv2.GaussianBlur(ink.astype(np.float32), (0, 0), max(1.0, width / 4)) > 0.5
+        skeleton = _prune_spurs(skeletonize(smooth), max_len=round(width + 2 * target))
+        ink = cv2.dilate(skeleton.astype(np.uint8), disk(target)) > 0
 
     ink = cv2.morphologyEx(ink.astype(np.uint8), cv2.MORPH_CLOSE, disk(max(3, target * 0.6))) > 0
     ink = remove_small_components(ink, min_area)

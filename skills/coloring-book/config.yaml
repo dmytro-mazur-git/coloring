@@ -42,10 +42,10 @@ thumb_max_px: 512
 
 profiles:
   # line_px / min_component_area_px are at print scale (A4, 300 DPI).
-  # kmeans_k tunes `lineart --mode convert` (color regions; 8 more are added for outlines' shades).
-  easy:   {line_px: [8, 14], regions: [0, 40],    min_component_area_px: 400, kmeans_k: 6}
-  medium: {line_px: [5, 8],  regions: [30, 150],  min_component_area_px: 150, kmeans_k: 10}
-  hard:   {line_px: [3, 5],  regions: [100, 400], min_component_area_px: 50,  kmeans_k: 16}
+  # kmeans_k / detail_edges tune `lineart --mode convert`.
+  easy:   {line_px: [8, 14], regions: [0, 40],    min_component_area_px: 400, kmeans_k: 6,  detail_edges: false}
+  medium: {line_px: [5, 8],  regions: [30, 150],  min_component_area_px: 150, kmeans_k: 10, detail_edges: false}
+  hard:   {line_px: [3, 5],  regions: [100, 400], min_component_area_px: 50,  kmeans_k: 16, detail_edges: true}
 
 pdf:
   dpi: 300
